@@ -22,6 +22,9 @@ defmodule ChalkSync.SyncPostgres.PendingJoin do
     episode = %EpisodeKey{tenant_id: tenant_id, space_id: space_id, episode_id: episode_id}
     display_name = "Pending Participant"
 
+    owner_capabilities =
+      Map.get(policy, :role_capabilities, Reducer.new(episode_id).role_capabilities)["owner"]
+
     payload = %{
       "participant_id" => participant_id,
       "display_name" => display_name,
@@ -45,7 +48,7 @@ defmodule ChalkSync.SyncPostgres.PendingJoin do
           [
             Rows.uuid(participant_id),
             display_name,
-            Reducer.new(episode_id).role_capabilities["owner"],
+            owner_capabilities,
             Rows.uuid(tenant_id),
             Rows.uuid(space_id),
             Rows.uuid(episode_id)
@@ -88,7 +91,7 @@ defmodule ChalkSync.SyncPostgres.PendingJoin do
       participant_generation: 1,
       admission_lifecycle_intent_id: intent_id,
       role: "owner",
-      capabilities: Reducer.new(episode_id).role_capabilities["owner"]
+      capabilities: owner_capabilities
     }
 
     %{
@@ -140,7 +143,7 @@ defmodule ChalkSync.SyncPostgres.PendingJoin do
     )
   end
 
-  defp pending_join_policy do
+  def pending_join_policy do
     %{
       artifact_policy: %{
         "schema_version" => "episode_config.v2",

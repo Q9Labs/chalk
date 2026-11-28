@@ -1,6 +1,7 @@
 defmodule ChalkSync.Webhooks.Producer do
   @moduledoc false
 
+  alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.Event
@@ -38,6 +39,34 @@ defmodule ChalkSync.Webhooks.Producer do
   end
 
   def produce_external(_connection, %EpisodeKey{}, _external, _event, _object), do: :ok
+
+  @spec produce_focus_changed(EpisodeKey.t(), map()) :: :ok
+  def produce_focus_changed(%EpisodeKey{} = episode, object) do
+    Database.guard(
+      fn ->
+        Postgrex.transaction(Database.connection(episode), fn connection ->
+          since_ms = DateTime.to_unix(object.since, :millisecond)
+
+          produce_source(
+            connection,
+            episode,
+            %{
+              transition_key: "focus_changed:#{object.id}:#{since_ms}",
+              event_name: "participant.focus_changed",
+              journey_id: UUID.generate(),
+              parent_journey_event_id: nil,
+              producing_trace_id: nil,
+              producing_span_id: nil
+            },
+            object
+          )
+        end)
+
+        :ok
+      end,
+      :ok
+    )
+  end
 
   def produce_episode_departures(connection, episode, context, objects) do
     tenant_id = UUID.dump!(episode.tenant_id)
@@ -78,6 +107,45 @@ defmodule ChalkSync.Webhooks.Producer do
       Postgrex.query!(connection, SQL.matching_revisions(), [tenant_id, event_name]).rows
 
     produce_versions(connection, episode, source, object, event_name, revisions)
+    produce_focus_completed(connection, episode, source, object, event_name)
+  end
+
+  defp produce_focus_completed(_connection, _episode, _source, _object, event_name)
+       when event_name != "episode.ended",
+       do: :ok
+
+  defp produce_focus_completed(connection, episode, source, object, "episode.ended") do
+    enabled =
+      case Postgrex.query!(
+             connection,
+             "select coalesce((config_snapshot -> 'focus' ->> 'enabled')::boolean, false) from episodes where tenant_id=$1 and space_id=$2 and id=$3",
+             [
+               UUID.dump!(episode.tenant_id),
+               UUID.dump!(episode.space_id),
+               UUID.dump!(episode.episode_id)
+             ]
+           ).rows do
+        [[enabled]] when is_boolean(enabled) -> enabled
+        _ -> false
+      end
+
+    if enabled do
+      focus_source = %{
+        source
+        | transition_key: source.transition_key <> ":focus.completed",
+          event_name: "focus.completed"
+      }
+
+      revisions =
+        Postgrex.query!(connection, SQL.matching_revisions(), [
+          UUID.dump!(episode.tenant_id),
+          "focus.completed"
+        ]).rows
+
+      produce_versions(connection, episode, focus_source, object, "focus.completed", revisions)
+    end
+
+    :ok
   end
 
   defp produce_versions(connection, episode, intent, object, event_name, revisions) do
@@ -88,7 +156,10 @@ defmodule ChalkSync.Webhooks.Producer do
 
     # A terminal Episode Event is durable evidence even after the last receiver
     # is removed. Delivery eligibility must not decide whether the Episode ended.
-    versions = if event_name == "episode.ended", do: Map.put_new(versions, 1, []), else: versions
+    versions =
+      if event_name in ["episode.ended", "focus.completed"],
+        do: Map.put_new(versions, 1, []),
+        else: versions
 
     Enum.each(versions, fn {api_version, version_revisions} ->
       produce_version(
@@ -242,11 +313,15 @@ defmodule ChalkSync.Webhooks.Producer do
   defp occurred_at("participant.joined", object), do: object.joined_at
   defp occurred_at("participant.left", object), do: object.left_at
   defp occurred_at("episode.ended", object), do: object.ended_at
+  defp occurred_at("focus.completed", object), do: object.ended_at
+  defp occurred_at("participant.focus_changed", object), do: object.since
 
   defp resource_type(event_name) when event_name in ["participant.joined", "participant.left"],
     do: "participant"
 
   defp resource_type("episode.ended"), do: "episode"
+  defp resource_type("focus.completed"), do: "episode"
+  defp resource_type("participant.focus_changed"), do: "participant"
 
   defp upstream_visibility(%{journey_id: nil}), do: "unknown"
   defp upstream_visibility(_intent), do: "visible"

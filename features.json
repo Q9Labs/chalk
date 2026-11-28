@@ -82,13 +82,17 @@
         "sdks/typescript/react/src/components/participants-panel",
         "sdks/typescript/react/src/components/stage",
         "apps/api/internal/httpapi/admission_request.go",
+        "apps/api/internal/httpapi/episode_focus.go",
+        "apps/api/internal/httpapi/episode_focus_test.go",
         "apps/api/internal/httpapi/episode_lifecycle_auth_test.go",
         "apps/sync/test/chalk_sync/participant_details_postgres_test.exs",
         "sdks/typescript/react/src/components/AIBadgeSurfaces.test.tsx",
         "apps/api/internal/httpapi/participant_lobby.go",
         "apps/api/internal/httpapi/participant_lobby_test.go",
         "apps/api/internal/httpapi/recording_entrance_lobby_test.go",
-        "sdks/typescript/react/src/components/lobby"
+        "sdks/typescript/react/src/components/lobby",
+        "sdks/typescript/client/src/space-client/focus-controller.ts",
+        "sdks/typescript/react/src/components/focus"
       ]
     },
     {

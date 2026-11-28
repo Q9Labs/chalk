@@ -433,6 +433,7 @@ insert into episodes (
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
         'linger_window_seconds', spaces.linger_window_seconds,
         'artifact_policy', $6::jsonb,
+        'focus', spaces.focus,
         'media_plane_binding', $7::jsonb
     )
 from spaces
@@ -2082,7 +2083,7 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 }
 
 const lockTenantSpaceForUpdate = `-- name: LockTenantSpaceForUpdate :one
-select id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+select id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, focus, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 from spaces
 where
     tenant_id = $1
@@ -2113,6 +2114,7 @@ func (q *Queries) LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSp
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

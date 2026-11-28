@@ -157,6 +157,12 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       lowerHand: () => dispatch({ type: "lowerHand" }),
       renameSelf: (displayName: string) => dispatch({ type: "renameSelf", displayName }),
     },
+    focus: {
+      stepAway: async () => undefined,
+      return: async () => undefined,
+      allowOtherTabs: async () => undefined,
+      endAllow: async () => undefined,
+    },
     reactions: {
       send: async (reaction: Reaction) => {
         const active = createPreviewReaction(snapshot, reaction);

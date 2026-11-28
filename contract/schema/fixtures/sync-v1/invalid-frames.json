@@ -145,6 +145,47 @@
       "extra": true
     },
     {
+      "type": "app_state_set",
+      "state": "away",
+      "windowed": true
+    },
+    {
+      "type": "app_state_set",
+      "state": "inactive"
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000005",
+      "name": "set_focus_step_away",
+      "payload": {
+        "reason": "lunch"
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000006",
+      "name": "clear_focus_step_away",
+      "payload": {
+        "reason": "reading"
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000007",
+      "name": "open_focus_allowance",
+      "payload": {
+        "minutes": 0
+      }
+    },
+    {
+      "type": "command",
+      "command_id": "command-00000008",
+      "name": "close_focus_allowance",
+      "payload": {
+        "minutes": 15
+      }
+    },
+    {
       "type": "chat_send",
       "client_message_id": "chat-message-0001",
       "text": ""

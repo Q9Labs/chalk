@@ -132,6 +132,44 @@ type EpisodeCreateRequest struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
+type EpisodeFocusAllowWindow struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	ActorParticipantID pgtype.UUID        `json:"actor_participant_id"`
+	ID                 pgtype.UUID        `json:"id"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	EndsAt             pgtype.Timestamptz `json:"ends_at"`
+	EndedAt            pgtype.Timestamptz `json:"ended_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type EpisodeFocusInterval struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	SpaceID       pgtype.UUID        `json:"space_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ParticipantID pgtype.UUID        `json:"participant_id"`
+	ID            pgtype.UUID        `json:"id"`
+	State         string             `json:"state"`
+	Windowed      bool               `json:"windowed"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	EndedAt       pgtype.Timestamptz `json:"ended_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type EpisodeFocusStepAway struct {
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	SpaceID            pgtype.UUID        `json:"space_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	ParticipantID      pgtype.UUID        `json:"participant_id"`
+	ActorParticipantID pgtype.UUID        `json:"actor_participant_id"`
+	ID                 pgtype.UUID        `json:"id"`
+	Reason             string             `json:"reason"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	EndedAt            pgtype.Timestamptz `json:"ended_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type EpisodePresenceLease struct {
 	TenantID  pgtype.UUID        `json:"tenant_id"`
 	SpaceID   pgtype.UUID        `json:"space_id"`
@@ -1247,6 +1285,7 @@ type Space struct {
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
 	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	Focus                         []byte             `json:"focus"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`

@@ -8,9 +8,9 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
     publishAudio publishVideo publishScreen subscribe raiseHand renameSelf sendChat
     sendReaction drawWhiteboard manageWhiteboard manageAdmission assignRoles muteOthers
     stopVideoOthers stopScreenOthers requestMediaOthers removeParticipant manageRecording
-    startEpisode extendEpisode endEpisode manageMembers clearSpaceContent
+    startEpisode extendEpisode endEpisode manageMembers clearSpaceContent focus.view focus.manage focus.exempt
   )
-  @max_capabilities 23
+  @max_capabilities 26
   @max_display_name_bytes 256
   @max_participants 500
   @max_role_bytes 64

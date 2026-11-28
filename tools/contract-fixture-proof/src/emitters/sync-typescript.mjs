@@ -140,6 +140,7 @@ function renderTypeScript(contract) {
     "    case 'delivery_ack': return exactObject(value, ['type', 'stream', 'revision', 'state_digest']);",
     "    case 'recovery_ack': return exactObject(value, ['type', 'recovery_id', 'revision', 'state_digest']);",
     "    case 'connection_quality_set': return exactObject(value, " + JSON.stringify(contract.connectionQualitySet.exactFields) + ");",
+    "    case 'app_state_set': return exactObject(value, " + JSON.stringify(contract.appStateSet.exactFields) + ");",
     "    case 'entered': return exactObject(value, ['type']);",
     "    case 'ping': return exactObject(value, ['type']);",
     "    default: return false;",
@@ -159,7 +160,7 @@ function renderTypeScript(contract) {
       JSON.stringify(Object.keys(contract.snapshot.admissionRequests.items).map(snakeCase)) +
       "))) return false;",
     "  const roleCapabilities = value.role_capabilities;",
-    "  if (!isObject(roleCapabilities) || Object.keys(roleCapabilities).length === 0 || !Object.values(roleCapabilities).every((capabilities) => Array.isArray(capabilities) && uniqueStrings(capabilities) && capabilities.length <= 23)) return false;",
+    "  if (!isObject(roleCapabilities) || Object.keys(roleCapabilities).length === 0 || !Object.values(roleCapabilities).every((capabilities) => Array.isArray(capabilities) && uniqueStrings(capabilities) && capabilities.length <= 26)) return false;",
     "  if (value.recording !== null && ((value.recording.status === 'failed') !== (value.recording.failure_code !== null))) return false;",
     "  const participantIds = new Set<unknown>();",
     "  for (const participant of value.participants) {",
@@ -201,7 +202,7 @@ function renderTypeScript(contract) {
       ", ...(Object.hasOwn(value, 'off_reason') ? ['off_reason'] : []), ...(Object.hasOwn(value, 'off_revision') ? ['off_revision'] : [])]) && validMediaOffReason(value);",
     "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
       JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
-      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'device_kind') ? ['device_kind'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : [])]);",
+      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'device_kind') ? ['device_kind'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : []), ...(Object.hasOwn(value, 'focus_app_state') ? ['focus_app_state'] : []), ...(Object.hasOwn(value, 'focus_windowed') ? ['focus_windowed'] : []), ...(Object.hasOwn(value, 'focus_step_away_reason') ? ['focus_step_away_reason'] : []), ...(Object.hasOwn(value, 'focus_allowed') ? ['focus_allowed'] : [])]);",
     "  return false;",
     "}",
     "function strictProjection(value: Record<string, unknown>): boolean {",
@@ -309,7 +310,7 @@ function renderTypeScript(contract) {
     "",
     `export const ParticipantSchema = Schema.Struct({ ${participantSchemaFields} }).check(exactKeysWithOptional(${JSON.stringify(participantRequiredKeys)}, ${JSON.stringify(participantOptionalKeys)}));`,
     "export const AdmissionRequestSchema = Schema.Struct({ admission_request_id: UuidSchema, participant_id: UuidSchema, display_name: boundedUtf8String(256, 1), role: RoleSchema, expires_at_ms: PositiveIntegerSchema }).check(exactKeys(['admission_request_id', 'participant_id', 'display_name', 'role', 'expires_at_ms']));",
-    "const UniqueCapabilityArraySchema = Schema.Array(CapabilitySchema).check(Schema.isMaxLength(23), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique capabilities' }));",
+    "const UniqueCapabilityArraySchema = Schema.Array(CapabilitySchema).check(Schema.isMaxLength(26), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique capabilities' }));",
     "const RoleCapabilitiesSchema = Schema.Record(RoleSchema, UniqueCapabilityArraySchema);",
     "const RecordingSchema = Schema.Struct({ recording_id: UuidSchema, status: " +
       renderLiteralUnion(contract.snapshot.recording.fields.status) +
@@ -431,7 +432,7 @@ function renderTypeScript(contract) {
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.state) +
       ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), device_kind: Schema.optional(" +
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.deviceKind) +
-      "), admission_revision: Schema.optional(PositiveIntegerSchema), connection_quality: Schema.optional(Schema.Literals(['good', 'weak', 'poor'])) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
+      "), admission_revision: Schema.optional(PositiveIntegerSchema), connection_quality: Schema.optional(Schema.Literals(['good', 'weak', 'poor'])), focus_app_state: Schema.optional(Schema.Literals(['active', 'inactive', 'background'])), focus_windowed: Schema.optional(Schema.Boolean), focus_step_away_reason: Schema.optional(Schema.Literals(['reading', 'notes', 'break'])), focus_allowed: Schema.optional(Schema.Boolean) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
   );
   lines.push(
     "export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal('projection_snapshot'), stream: Schema.Literal('media'), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(" +
@@ -505,11 +506,12 @@ function renderTypeScript(contract) {
   lines.push("export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal('entered') });");
   lines.push("export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal('entered_ack'), ...ServerCorrelationFields });");
   lines.push("export const ConnectionQualitySetFrameSchema = Schema.Struct({ type: Schema.Literal('connection_quality_set'), quality: " + renderLiteralUnion(contract.connectionQualitySet.quality) + " });");
+  lines.push("export const AppStateSetFrameSchema = Schema.Struct({ type: Schema.Literal('app_state_set'), state: " + renderLiteralUnion(contract.appStateSet.state) + ", windowed: Schema.Boolean });");
   lines.push("export const PingFrameSchema = Schema.Struct({ type: Schema.Literal('ping') });");
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong'), ...ServerCorrelationFields });");
   lines.push("");
   lines.push(
-    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, ConnectionQualitySetFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, ConnectionQualitySetFrameSchema, AppStateSetFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;");
   lines.push(
@@ -557,7 +559,7 @@ function snapshotMode(modes) {
 }
 
 function participantFieldSchema(name, field) {
-  const schema = name === "capabilities" ? "Schema.Array(CapabilitySchema).check(Schema.isMaxLength(23), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique capabilities' }))" : renderFieldSchema(field);
+  const schema = name === "capabilities" ? "Schema.Array(CapabilitySchema).check(Schema.isMaxLength(26), Schema.makeFilter((capabilities) => uniqueStrings(capabilities) ? undefined : { path: [], issue: 'must contain unique capabilities' }))" : renderFieldSchema(field);
   return schema;
 }
 

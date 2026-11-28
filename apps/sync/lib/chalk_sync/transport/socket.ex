@@ -269,6 +269,9 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame({:connection_quality_set, quality}, state),
     do: LiveRequests.connection_quality(quality, state)
 
+  defp handle_frame({:app_state_set, app_state, windowed}, state),
+    do: LiveRequests.app_state(app_state, windowed, state)
+
   defp handle_frame({name, input}, state)
        when name in [
               :reaction_send,

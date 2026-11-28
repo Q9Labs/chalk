@@ -74,4 +74,14 @@ export const webhookFixturesV1 = [
     event: "endpoint.test",
     body_utf8: '{"id":"00000000-0000-4000-8000-000000000015","event":"endpoint.test","api_version":1,"occurred_at":"2026-07-12T19:13:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"endpoint_id":"80000000-0000-4000-8000-000000000001"}}}',
   },
+  {
+    event: "participant.focus_changed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000016","event":"participant.focus_changed","api_version":1,"occurred_at":"2026-07-12T18:20:10.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"40000000-0000-4000-8000-000000000001","identity_id":"50000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","app_state":"background","windowed":false,"since":"2026-07-12T18:20:00.000Z"}}}',
+  },
+  {
+    event: "focus.completed",
+    body_utf8:
+      '{"id":"00000000-0000-4000-8000-000000000017","event":"focus.completed","api_version":1,"occurred_at":"2026-07-12T19:04:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"30000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","status":"ended","started_at":"2026-07-12T18:04:00.000Z","ended_at":"2026-07-12T19:04:00.000Z","created_at":"2026-07-12T18:04:00.000Z","updated_at":"2026-07-12T19:04:00.000Z"}}}',
+  },
 ] as const;

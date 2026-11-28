@@ -357,6 +357,13 @@ export const CreateSpaceRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission_policy: Schema.optional(Schema.Unknown),
     default_episode_duration_seconds: Schema.Number,
+    focus: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          enabled: Schema.Boolean,
+        }),
+      ),
+    ),
     linger_window_seconds: Schema.Number,
     maximum_episode_duration_seconds: Schema.Number,
     media_plane: Schema.optional(Schema.Literal("chalk_sfu")),
@@ -545,6 +552,8 @@ export const CreateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
         "episode.started",
         "participant.joined",
         "participant.left",
+        "participant.focus_changed",
+        "focus.completed",
         "recording.started",
         "recording.completed",
         "recording.failed",
@@ -657,6 +666,46 @@ export const EpisodeEndSchema = /* @__PURE__ */ (() =>
     status: Schema.String,
   }))();
 export type EpisodeEnd = typeof EpisodeEndSchema.Type;
+
+export const EpisodeFocusSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    allow_windows: Schema.Array(
+      Schema.Struct({
+        actor_participant_id: ParticipantIdSchema,
+        ended_at: Schema.NullOr(DateTimeStringSchema),
+        ends_at: DateTimeStringSchema,
+        started_at: DateTimeStringSchema,
+      }),
+    ),
+    episode_id: EpisodeIdSchema,
+    participants: Schema.Array(
+      Schema.Struct({
+        away_time_seconds: Schema.Number,
+        display_name: Schema.String,
+        intervals: Schema.Array(
+          Schema.Struct({
+            ended_at: DateTimeStringSchema,
+            started_at: DateTimeStringSchema,
+            state: Schema.String,
+            windowed: Schema.Boolean,
+          }),
+        ),
+        longest_away_seconds: Schema.Number,
+        participant_id: ParticipantIdSchema,
+        reporting_coverage_ratio: Schema.Number,
+        reporting_coverage_seconds: Schema.Number,
+        step_aways: Schema.Array(
+          Schema.Struct({
+            ended_at: Schema.NullOr(DateTimeStringSchema),
+            reason: Schema.String,
+            started_at: DateTimeStringSchema,
+          }),
+        ),
+        times_away: Schema.Number,
+      }),
+    ),
+  }))();
+export type EpisodeFocus = typeof EpisodeFocusSchema.Type;
 
 export const EpisodeListSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -1360,6 +1409,9 @@ export const SpaceSchema = /* @__PURE__ */ (() =>
     created_by_user_id: Schema.NullOr(UserIdSchema),
     default_episode_duration_seconds: Schema.Number,
     effective_media_plane: Schema.NullOr(Schema.Literal("chalk_sfu")),
+    focus: Schema.Struct({
+      enabled: Schema.Boolean,
+    }),
     id: SpaceIdSchema,
     linger_window_seconds: Schema.Number,
     maximum_episode_duration_seconds: Schema.Number,
@@ -2154,6 +2206,11 @@ export const UpdateSpaceRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission_policy: Schema.optional(Schema.Unknown),
     default_episode_duration_seconds: Schema.optional(Schema.Number),
+    focus: Schema.optional(
+      Schema.Struct({
+        enabled: Schema.Boolean,
+      }),
+    ),
     linger_window_seconds: Schema.optional(Schema.Number),
     maximum_episode_duration_seconds: Schema.optional(Schema.Number),
     media_plane: Schema.optional(Schema.NullOr(Schema.Literal("chalk_sfu"))),
@@ -2412,6 +2469,8 @@ export const UpdateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
           "episode.started",
           "participant.joined",
           "participant.left",
+          "participant.focus_changed",
+          "focus.completed",
           "recording.started",
           "recording.completed",
           "recording.failed",
@@ -2503,6 +2562,8 @@ export const WebhookEndpointSchema = /* @__PURE__ */ (() =>
         "episode.started",
         "participant.joined",
         "participant.left",
+        "participant.focus_changed",
+        "focus.completed",
         "recording.started",
         "recording.completed",
         "recording.failed",
@@ -2544,6 +2605,8 @@ export const WebhookEndpointWithSecretSchema = /* @__PURE__ */ (() =>
         "episode.started",
         "participant.joined",
         "participant.left",
+        "participant.focus_changed",
+        "focus.completed",
         "recording.started",
         "recording.completed",
         "recording.failed",
@@ -3251,6 +3314,25 @@ export const GetEpisodeAttendance429ResponseHeadersSchema = /* @__PURE__ */ (() 
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetEpisodeFocusPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetEpisodeFocusPathParams = typeof GetEpisodeFocusPathParamsSchema.Type;
+
+export const GetEpisodeFocusResponseSchema = /* @__PURE__ */ (() => EpisodeFocusSchema)();
+export type GetEpisodeFocusResponse = typeof GetEpisodeFocusResponseSchema.Type;
+
+export const GetEpisodeFocus429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetEpisodeFocus429ResponseHeaders = typeof GetEpisodeFocus429ResponseHeadersSchema.Type;
 
 export const GetEpisodeTalkTimePathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3995,6 +4077,8 @@ export const ListWebhookDeliveriesQueryParamsSchema = /* @__PURE__ */ (() =>
           "endpoint.test",
           "episode.ended",
           "episode.started",
+          "focus.completed",
+          "participant.focus_changed",
           "participant.joined",
           "participant.left",
           "recording.completed",
@@ -8051,6 +8135,19 @@ export const GetEpisodeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 
+export const GetEpisodeFocusErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetEpisodeFocusError = typeof GetEpisodeFocusErrorSchema.Type;
+
 export const GetEpisodeTalkTimeErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -9033,6 +9130,7 @@ export const ChalkOperationPolicies = {
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getEpisodeFocus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeTalkTime: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getLatestAcceptedTenantHandover: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

@@ -1001,6 +1001,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/focus": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get episode focus */
+    get: operations["getEpisodeFocus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants": {
     parameters: {
       query?: never;
@@ -1882,6 +1899,9 @@ export interface components {
         | boolean
         | null;
       default_episode_duration_seconds: number;
+      focus?: {
+        enabled: boolean;
+      } | null;
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
       /** @enum {string} */
@@ -2039,6 +2059,8 @@ export interface components {
         | "episode.started"
         | "participant.joined"
         | "participant.left"
+        | "participant.focus_changed"
+        | "focus.completed"
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
@@ -2139,6 +2161,35 @@ export interface components {
         target_participant_id?: components["schemas"]["ParticipantId"] | null;
       } | null;
       status: string;
+    };
+    EpisodeFocus: {
+      allow_windows: {
+        actor_participant_id: components["schemas"]["ParticipantId"];
+        ended_at: components["schemas"]["DateTimeString"] | null;
+        ends_at: components["schemas"]["DateTimeString"];
+        started_at: components["schemas"]["DateTimeString"];
+      }[];
+      episode_id: components["schemas"]["EpisodeId"];
+      participants: {
+        away_time_seconds: number;
+        display_name: string;
+        intervals: {
+          ended_at: components["schemas"]["DateTimeString"];
+          started_at: components["schemas"]["DateTimeString"];
+          state: string;
+          windowed: boolean;
+        }[];
+        longest_away_seconds: number;
+        participant_id: components["schemas"]["ParticipantId"];
+        reporting_coverage_ratio: number;
+        reporting_coverage_seconds: number;
+        step_aways: {
+          ended_at: components["schemas"]["DateTimeString"] | null;
+          reason: string;
+          started_at: components["schemas"]["DateTimeString"];
+        }[];
+        times_away: number;
+      }[];
     };
     /** Format: uuid */
     EpisodeId: string;
@@ -2680,6 +2731,9 @@ export interface components {
       default_episode_duration_seconds: number;
       /** @enum {string|null} */
       effective_media_plane: "chalk_sfu" | null;
+      focus: {
+        enabled: boolean;
+      };
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
@@ -3454,6 +3508,9 @@ export interface components {
         | boolean
         | null;
       default_episode_duration_seconds?: number;
+      focus?: {
+        enabled: boolean;
+      };
       linger_window_seconds?: number;
       maximum_episode_duration_seconds?: number;
       /** @enum {string|null} */
@@ -3714,6 +3771,8 @@ export interface components {
         | "episode.started"
         | "participant.joined"
         | "participant.left"
+        | "participant.focus_changed"
+        | "focus.completed"
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
@@ -3796,6 +3855,8 @@ export interface components {
         | "episode.started"
         | "participant.joined"
         | "participant.left"
+        | "participant.focus_changed"
+        | "focus.completed"
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
@@ -3829,6 +3890,8 @@ export interface components {
         | "episode.started"
         | "participant.joined"
         | "participant.left"
+        | "participant.focus_changed"
+        | "focus.completed"
         | "recording.started"
         | "recording.completed"
         | "recording.failed"
@@ -9879,6 +9942,96 @@ export interface operations {
       };
     };
   };
+  getEpisodeFocus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EpisodeFocus"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   admitEpisodeParticipant: {
     parameters: {
       query?: never;
@@ -13255,6 +13408,8 @@ export interface operations {
           | "endpoint.test"
           | "episode.ended"
           | "episode.started"
+          | "focus.completed"
+          | "participant.focus_changed"
           | "participant.joined"
           | "participant.left"
           | "recording.completed"

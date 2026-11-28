@@ -116,7 +116,11 @@ defmodule ChalkSync.Episodes.Coordinator.Delivery do
     if Subscribers.field(event, :name) in [
          "participant_joined",
          "participant_left",
-         "episode_ended"
+         "episode_ended",
+         "focus_step_away_set",
+         "focus_step_away_cleared",
+         "focus_allowance_opened",
+         "focus_allowance_closed"
        ] do
       LiveFrames.start_live_reconcile(next)
     else

@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261127140000.
+-- Schema snapshot through migration 20261127150000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -292,6 +292,7 @@ create table spaces (
     transcription_policy text not null default 'automatic'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
     transcript_language text check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
+    focus jsonb not null default '{"enabled":false}'::jsonb,
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
@@ -304,7 +305,12 @@ create table spaces (
     check (default_episode_duration_seconds between 60 and 604800),
     check (maximum_episode_duration_seconds between 60 and 604800),
     check (default_episode_duration_seconds <= maximum_episode_duration_seconds),
-    check (linger_window_seconds >= 0)
+    check (linger_window_seconds >= 0),
+    constraint spaces_focus_check check (
+        jsonb_typeof(focus) = 'object'
+        and focus - 'enabled' = '{}'::jsonb
+        and jsonb_typeof(focus -> 'enabled') = 'boolean'
+    )
 );
 create index spaces_tenant_created_at_id_idx on spaces(tenant_id, created_at desc, id desc);
 create index spaces_tenant_archived_created_at_id_idx on spaces(tenant_id, archived_at, created_at desc, id desc);
@@ -338,9 +344,9 @@ as $$
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent'
+        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
     ]::text[]
-        and cardinality(value) <= 23
+        and cardinality(value) <= 26
         and cardinality(value) = (select count(distinct capability) from unnest(value) as capability)
 $$;
 
@@ -1631,6 +1637,75 @@ create index sync_lifecycle_intents_episode_pending_idx
     on sync_lifecycle_intents(tenant_id, episode_id)
     where status = 'pending';
 
+create table episode_focus_intervals (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    id uuid not null default gen_random_uuid(),
+    state text not null check (state in ('active', 'inactive', 'background')),
+    windowed boolean not null,
+    started_at timestamptz not null,
+    ended_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, episode_id, id),
+    unique (tenant_id, space_id, episode_id, id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id) on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id) on delete restrict,
+    check (ended_at > started_at)
+);
+create index episode_focus_intervals_participant_idx
+    on episode_focus_intervals(tenant_id, space_id, episode_id, participant_id, started_at);
+
+create table episode_focus_step_aways (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    actor_participant_id uuid not null,
+    id uuid not null default gen_random_uuid(),
+    reason text not null check (reason in ('reading', 'notes', 'break')),
+    started_at timestamptz not null default now(),
+    ended_at timestamptz,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, episode_id, id),
+    unique (tenant_id, space_id, episode_id, id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id) on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id) on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, actor_participant_id)
+        references participants(tenant_id, space_id, episode_id, id) on delete restrict,
+    check (ended_at is null or ended_at >= started_at)
+);
+create unique index episode_focus_step_aways_one_open_idx
+    on episode_focus_step_aways(tenant_id, space_id, episode_id, participant_id)
+    where ended_at is null;
+
+create table episode_focus_allow_windows (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    actor_participant_id uuid not null,
+    id uuid not null default gen_random_uuid(),
+    started_at timestamptz not null default now(),
+    ends_at timestamptz not null,
+    ended_at timestamptz,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, episode_id, id),
+    unique (tenant_id, space_id, episode_id, id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id) on delete restrict,
+    foreign key (tenant_id, space_id, episode_id, actor_participant_id)
+        references participants(tenant_id, space_id, episode_id, id) on delete restrict,
+    check (ends_at > started_at),
+    check (ended_at is null or ended_at >= started_at)
+);
+create index episode_focus_allow_windows_episode_idx
+    on episode_focus_allow_windows(tenant_id, space_id, episode_id, started_at);
+
 create table sync_control_events (
     tenant_id uuid not null,
     space_id uuid not null,
@@ -1734,7 +1809,11 @@ create table sync_command_receipts (
         'participant_leave',
         'start_episode',
         'extend_episode',
-        'end_episode'
+        'end_episode',
+        'set_focus_step_away',
+        'clear_focus_step_away',
+        'open_focus_allowance',
+        'close_focus_allowance'
     )),
     outcome text not null,
     rejection_reason text,
@@ -1802,7 +1881,11 @@ create table sync_command_receipts (
                 'participant_leave',
                 'start_episode',
                 'extend_episode',
-                'end_episode'
+                'end_episode',
+                'set_focus_step_away',
+                'clear_focus_step_away',
+                'open_focus_allowance',
+                'close_focus_allowance'
             )
             and (
                 (
@@ -3336,7 +3419,7 @@ create table webhook_endpoint_revisions (
     ),
     constraint webhook_endpoint_revisions_api_version_check check (api_version = 1),
     constraint webhook_endpoint_revisions_event_types_check check (
-        cardinality(event_types) between 1 and 14
+        cardinality(event_types) between 1 and 16
         and event_types <@ array[
             'space.created',
             'space.updated',
@@ -3346,6 +3429,8 @@ create table webhook_endpoint_revisions (
             'episode.ended',
             'participant.joined',
             'participant.left',
+            'participant.focus_changed',
+            'focus.completed',
             'recording.started',
             'recording.completed',
             'recording.failed',
@@ -3393,6 +3478,8 @@ create table webhook_events (
         'episode.ended',
         'participant.joined',
         'participant.left',
+        'participant.focus_changed',
+        'focus.completed',
         'recording.started',
         'recording.completed',
         'recording.failed',

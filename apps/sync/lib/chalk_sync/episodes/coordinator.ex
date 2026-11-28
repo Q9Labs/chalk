@@ -212,6 +212,13 @@ defmodule ChalkSync.Episodes.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
+  @spec set_app_state(pid(), Identity.t(), String.t(), boolean(), pid()) :: :ok | {:error, atom()}
+  def set_app_state(coordinator, %Identity{} = identity, app_state, windowed, socket \\ self()) do
+    GenServer.call(coordinator, {:set_app_state, socket, identity, app_state, windowed}, 3000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
   @doc false
   @spec expire_live_requests(pid(), integer()) :: :ok | {:error, atom()}
   def expire_live_requests(coordinator, now_ms) when is_integer(now_ms) do

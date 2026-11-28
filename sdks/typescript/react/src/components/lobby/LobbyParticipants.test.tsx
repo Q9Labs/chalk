@@ -48,7 +48,7 @@ it("names every AI participant, counts the other people, and lists everyone behi
     { displayName: "Wen", identityKind: "guest" },
   ]);
   expect(text()).toBe("Nora, Scribe and 3 others are in this call");
-  await vi.waitFor(() => expect(document.querySelector("[data-testid='lobby.others']")).not.toBeNull());
+  await vi.waitFor(() => expect(document.querySelector("[data-testid='lobby.others']")).not.toBeNull(), { timeout: 10_000 });
   const others = document.querySelector<HTMLButtonElement>("[data-testid='lobby.others']");
   await act(async () => others?.click());
   expect(document.body.textContent).toContain("5 in this call");

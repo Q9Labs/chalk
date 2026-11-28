@@ -9,7 +9,8 @@ type EventType = Extract<DeveloperAction, { action: "create-webhook" }>["eventTy
 
 const EVENT_GROUPS: readonly (readonly [string, readonly EventType[]])[] = [
   ["Episode", ["episode.started", "episode.ended"]],
-  ["Participant", ["participant.joined", "participant.left"]],
+  ["Participant", ["participant.joined", "participant.left", "participant.focus_changed"]],
+  ["Focus", ["focus.completed"]],
   ["Recording", ["recording.started", "recording.completed", "recording.failed"]],
   ["Transcript", ["transcript.started", "transcript.completed", "transcript.failed"]],
   ["Space", ["space.created", "space.updated", "space.archived", "space.restored"]],

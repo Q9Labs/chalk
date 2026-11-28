@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -84,36 +85,7 @@ func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID,
 		return r.updateSpaceWithWebhook(ctx, tenantID, spaceID, input)
 	}
 
-	space, err := r.queries.UpdateTenantSpace(ctx, sqlc.UpdateTenantSpaceParams{
-		TenantID:                         uuid(tenantID),
-		ID:                               uuid(spaceID),
-		NameSet:                          input.Name.Set,
-		Name:                             requiredText(input.Name),
-		SlugSet:                          input.Slug.Set,
-		Slug:                             requiredText(input.Slug),
-		MediaPlaneSet:                    input.MediaPlane.Set,
-		MediaPlane:                       requiredText(input.MediaPlane),
-		MediaPlaneSettingSet:             input.MediaPlaneSetting.Set,
-		MediaPlaneSetting:                optionalPlaneSetting(input.MediaPlaneSetting),
-		MetadataSet:                      input.Metadata.Set,
-		Metadata:                         jsonBytes(input.Metadata.Value),
-		RecurringPolicySet:               input.RecurringPolicy.Set,
-		RecurringPolicy:                  jsonBytes(input.RecurringPolicy.Value),
-		AdmissionPolicySet:               input.AdmissionPolicy.Set,
-		AdmissionPolicy:                  jsonBytes(input.AdmissionPolicy.Value),
-		DefaultEpisodeDurationSecondsSet: input.DefaultEpisodeDurationSeconds.Set,
-		DefaultEpisodeDurationSeconds:    optionalInt32(input.DefaultEpisodeDurationSeconds),
-		MaximumEpisodeDurationSecondsSet: input.MaximumEpisodeDurationSeconds.Set,
-		MaximumEpisodeDurationSeconds:    optionalInt32(input.MaximumEpisodeDurationSeconds),
-		LingerWindowSecondsSet:           input.LingerWindowSeconds.Set,
-		LingerWindowSeconds:              optionalInt32(input.LingerWindowSeconds),
-		RecordingPolicySet:               input.RecordingPolicy.Set,
-		RecordingPolicy:                  optionalRecordingPolicy(input.RecordingPolicy),
-		TranscriptionPolicySet:           input.TranscriptionPolicy.Set,
-		TranscriptLanguageSet:            input.TranscriptLanguage.Set,
-		TranscriptLanguage:               text(optionalLanguageString(input.TranscriptLanguage.Value)),
-		TranscriptionPolicy:              optionalTranscriptionPolicy(input.TranscriptionPolicy),
-	})
+	space, err := r.queries.UpdateTenantSpace(ctx, updateTenantSpaceParams(tenantID, spaceID, input))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return spaces.Space{}, spaces.ErrSpaceNotFound
 	}
@@ -182,6 +154,7 @@ func createSpaceParams(input spaces.CreateSpaceInput) sqlc.CreateSpaceParams {
 		RecordingPolicy:               policyText(string(input.RecordingPolicy), input.RecordingPolicySet),
 		TranscriptionPolicy:           policyText(string(input.TranscriptionPolicy), input.TranscriptionPolicySet),
 		TranscriptLanguage:            text(optionalLanguageString(input.TranscriptLanguage)),
+		Focus:                         focusJSON(input.Focus),
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           input.LingerWindowSeconds,
@@ -268,6 +241,7 @@ func mapSpace(space sqlc.Space) spaces.Space {
 		Metadata:                      jsonRaw(space.Metadata),
 		RecurringPolicy:               jsonRaw(space.RecurringPolicy),
 		AdmissionPolicy:               jsonRaw(space.AdmissionPolicy),
+		Focus:                         parseFocusSettings(space.Focus),
 		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           space.LingerWindowSeconds,
@@ -292,6 +266,7 @@ func mapCreatedSpace(space sqlc.CreateSpaceRow) spaces.Space {
 		Metadata:                      jsonRaw(space.Metadata),
 		RecurringPolicy:               jsonRaw(space.RecurringPolicy),
 		AdmissionPolicy:               jsonRaw(space.AdmissionPolicy),
+		Focus:                         parseFocusSettings(space.Focus),
 		DefaultEpisodeDurationSeconds: space.DefaultEpisodeDurationSeconds,
 		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds:           space.LingerWindowSeconds,
@@ -300,6 +275,29 @@ func mapCreatedSpace(space sqlc.CreateSpaceRow) spaces.Space {
 		UpdatedAt:                     timestamp(space.UpdatedAt),
 		CreatedAt:                     timestamp(space.CreatedAt),
 	}
+}
+
+func focusJSON(settings spaces.FocusSettings) []byte {
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return []byte(`{"enabled":false}`)
+	}
+	return data
+}
+
+func optionalFocusJSON(settings spaces.OptionalFocusSettings) []byte {
+	if !settings.Set || settings.Value == nil {
+		return nil
+	}
+	return focusJSON(*settings.Value)
+}
+
+func parseFocusSettings(data []byte) spaces.FocusSettings {
+	var settings spaces.FocusSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return spaces.FocusSettings{}
+	}
+	return settings
 }
 
 func mapSpaceRole(role sqlc.SpaceRole) spaces.Role {

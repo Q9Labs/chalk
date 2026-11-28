@@ -161,6 +161,9 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
   def handle_call({:set_connection_quality, socket, identity, quality}, _from, state),
     do: LiveFrames.set_connection_quality(state, socket, identity, quality)
 
+  def handle_call({:set_app_state, socket, identity, app_state, windowed}, _from, state),
+    do: LiveFrames.set_app_state(state, socket, identity, app_state, windowed)
+
   def handle_call({:expire_live_requests, now_ms}, _from, state) do
     {:reply, :ok, LiveFrames.expire_live_requests_at(state, now_ms)}
   end
@@ -218,6 +221,10 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
     state
     |> LiveFrames.expire_live_requests_at(System.system_time(:millisecond))
     |> reschedule(:expire_live_requests, @queue_check_interval_ms)
+  end
+
+  def handle_info({:focus_state_held, socket, started_at_ms}, state) do
+    {:noreply, %{state | live: LiveEpisode.emit_held_focus(state.live, socket, started_at_ms)}}
   end
 
   def handle_info(:reconcile_live, state),

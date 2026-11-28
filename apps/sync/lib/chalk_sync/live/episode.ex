@@ -9,6 +9,8 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Postgres.Focus
+  alias ChalkSync.Webhooks.Producer, as: WebhookProducer
 
   @enforce_keys [
     :episode,
@@ -22,7 +24,9 @@ defmodule ChalkSync.Live.Episode do
     :media_observation_cursor,
     :media_projection,
     :presence_projection,
-    :connection_qualities
+    :connection_qualities,
+    :app_states,
+    :focus_webhooks
   ]
   defstruct [
     :episode,
@@ -36,7 +40,9 @@ defmodule ChalkSync.Live.Episode do
     :media_observation_cursor,
     :media_projection,
     :presence_projection,
-    :connection_qualities
+    :connection_qualities,
+    :app_states,
+    :focus_webhooks
   ]
 
   @type t :: %__MODULE__{}
@@ -55,7 +61,9 @@ defmodule ChalkSync.Live.Episode do
       media_observation_cursor: nil,
       media_projection: nil,
       presence_projection: nil,
-      connection_qualities: %{}
+      connection_qualities: %{},
+      app_states: %{},
+      focus_webhooks: %{}
     }
   end
 
@@ -102,7 +110,9 @@ defmodule ChalkSync.Live.Episode do
           state
           | connections: connections,
             requests: requests,
-            connection_qualities: Map.delete(state.connection_qualities, socket)
+            connection_qualities: Map.delete(state.connection_qualities, socket),
+            app_states: close_app_state(state, socket),
+            focus_webhooks: drop_socket_focus_webhooks(state.focus_webhooks, socket)
         }
     end
   end
@@ -129,6 +139,131 @@ defmodule ChalkSync.Live.Episode do
           | connection_qualities: Map.put(state.connection_qualities, socket, quality)
         })
     end
+  end
+
+  @doc """
+  Records the observable app state one live socket reports. Closing the prior interval is the
+  only durable write; a socket loss leaves the intervening time as not reporting.
+  """
+  @spec set_app_state(t(), pid(), String.t(), boolean()) :: {:ok, t(), [map()]} | {:error, atom()}
+  def set_app_state(%__MODULE__{} = state, socket, app_state, windowed)
+      when app_state in ["active", "inactive", "background"] and is_boolean(windowed) do
+    case Map.fetch(state.connections, socket) do
+      :error ->
+        {:error, :not_live}
+
+      {:ok, authority} ->
+        case Map.get(state.app_states, socket) do
+          %{state: ^app_state, windowed: ^windowed} ->
+            {:ok, state, []}
+
+          current ->
+            replace_app_state(state, socket, authority, current, app_state, windowed)
+        end
+    end
+  end
+
+  defp replace_app_state(state, socket, authority, current, app_state, windowed) do
+    now_ms = System.system_time(:millisecond)
+    close_reported_app_state(state, socket, authority, current, now_ms)
+    report = %{state: app_state, windowed: windowed, started_at_ms: now_ms}
+    Process.send_after(self(), {:focus_state_held, socket, now_ms}, 10_000)
+
+    focus_webhooks =
+      if current,
+        do: Map.delete(state.focus_webhooks, {socket, current.started_at_ms}),
+        else: state.focus_webhooks
+
+    Projections.presence_snapshot(%{
+      state
+      | app_states: Map.put(state.app_states, socket, report),
+        focus_webhooks: focus_webhooks
+    })
+  end
+
+  defp close_app_state(state, socket) do
+    case {Map.pop(state.app_states, socket), Map.get(state.connections, socket)} do
+      {{nil, app_states}, _authority} ->
+        app_states
+
+      {{current, app_states}, authority} when is_map(current) and is_map(authority) ->
+        close_reported_app_state(
+          state,
+          socket,
+          authority,
+          current,
+          System.system_time(:millisecond)
+        )
+
+        app_states
+
+      {_result, _authority} ->
+        state.app_states
+    end
+  end
+
+  @doc """
+  Emits the live Focus webhook once a reported state has actually held for ten seconds.
+  Timer messages for replaced or disconnected reports are stale and do nothing.
+  """
+  @spec emit_held_focus(t(), pid(), integer()) :: t()
+  def emit_held_focus(%__MODULE__{} = state, socket, started_at_ms) do
+    with current when is_map(current) <- Map.get(state.app_states, socket),
+         true <- current.started_at_ms == started_at_ms,
+         authority when is_map(authority) <- Map.get(state.connections, socket),
+         false <- Map.has_key?(state.focus_webhooks, {socket, started_at_ms}),
+         true <- System.system_time(:millisecond) - started_at_ms >= 10_000 do
+      produce_focus_changed(state, authority, current)
+
+      %{
+        state
+        | focus_webhooks: Map.put(state.focus_webhooks, {socket, started_at_ms}, true)
+      }
+    else
+      _ -> state
+    end
+  end
+
+  defp close_reported_app_state(_state, _socket, _authority, nil, _ended_at_ms), do: :ok
+
+  defp close_reported_app_state(state, socket, authority, current, ended_at_ms) do
+    if ended_at_ms - current.started_at_ms >= 10_000 do
+      # The timer normally emits while the state is live. This close-time fallback covers a
+      # coordinator that did not run long enough to receive that timer, without double-sending.
+      unless Map.has_key?(state.focus_webhooks, {socket, current.started_at_ms}) do
+        produce_focus_changed(state, authority, current)
+      end
+    end
+
+    Focus.close_interval(
+      state.episode,
+      authority.participant_id,
+      current.state,
+      current.windowed,
+      current.started_at_ms,
+      ended_at_ms
+    )
+  end
+
+  defp produce_focus_changed(state, authority, current) do
+    WebhookProducer.produce_focus_changed(state.episode, %{
+      id: authority.participant_id,
+      identity_id: Map.get(authority, :identity_id),
+      space_id: state.episode.space_id,
+      episode_id: state.episode.episode_id,
+      app_state: current.state,
+      windowed: current.windowed,
+      since: DateTime.from_unix!(current.started_at_ms, :millisecond)
+    })
+  end
+
+  defp drop_socket_focus_webhooks(webhooks, socket) do
+    keys =
+      webhooks
+      |> Enum.filter(fn {{candidate, _started_at}, true} -> candidate == socket end)
+      |> Enum.map(fn {key, true} -> key end)
+
+    Map.drop(webhooks, keys)
   end
 
   @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}
@@ -197,6 +332,7 @@ defmodule ChalkSync.Live.Episode do
             {:ok,
              %{
                participant_id: identity.participant_id,
+               identity_id: identity.identity_id,
                generation: identity.participant_generation
              }}
 

@@ -165,7 +165,9 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
     capability = required_capability(command.name)
     allowed = participant.capabilities
 
-    if capability in allowed, do: :ok, else: {:error, :capability_denied}
+    if capability == "self" or capability in allowed,
+      do: :ok,
+      else: {:error, :capability_denied}
   end
 
   defp validate_command_authority(_identity, _command, _state), do: :ok
@@ -189,6 +191,14 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
     do: "manageRecording"
 
   defp required_capability(:participant_leave), do: "self"
+
+  defp required_capability(name) when name in [:set_focus_step_away, :clear_focus_step_away],
+    do: "self"
+
+  defp required_capability(name)
+       when name in [:open_focus_allowance, :close_focus_allowance],
+       do: "focus.manage"
+
   defp required_capability(:end_episode), do: "endEpisode"
   defp required_capability(:extend_episode), do: "extendEpisode"
 

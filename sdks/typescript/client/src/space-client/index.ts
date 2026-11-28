@@ -51,6 +51,7 @@ export type {
   MediaRequestKind,
   MediaSlice,
   Participant,
+  ParticipantFocus,
   PendingChatSend,
   ParticipantPresence,
   ParticipantsController,

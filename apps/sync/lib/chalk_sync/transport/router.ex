@@ -136,6 +136,7 @@ defmodule ChalkSync.Transport.Router do
                 conn.query_params["screen_annotation_burn_in"] == "1",
             presenting: conn.query_params["presenting"] == "1",
             connection_quality: conn.query_params["connection_quality"] == "1",
+            app_state: conn.query_params["app_state"] == "1",
             participant_self_identity: conn.query_params["participant_device_admissions"] == "2",
             entry_generation: entry_generation(conn.query_params["entry_generation"]),
             connection_attributes: with_ingress(connection_attributes, direct),

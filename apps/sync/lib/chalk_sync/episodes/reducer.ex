@@ -375,6 +375,41 @@ defmodule ChalkSync.Episodes.Reducer do
     end
   end
 
+  defp command_target(state, actor_id, :set_focus_step_away, payload) do
+    with :ok <- Validation.exact_keys(payload, ["reason"]),
+         reason when reason in ["reading", "notes", "break"] <- payload["reason"],
+         {:ok, _participant} <- Events.participant(state, actor_id) do
+      {:ok, "focus_step_away_set", %{"participant_id" => actor_id, "reason" => reason}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(state, actor_id, :clear_focus_step_away, payload) do
+    with :ok <- Validation.exact_keys(payload, []),
+         {:ok, _participant} <- Events.participant(state, actor_id) do
+      {:ok, "focus_step_away_cleared", %{"participant_id" => actor_id}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(_state, actor_id, :open_focus_allowance, payload) do
+    with :ok <- Validation.exact_keys(payload, ["minutes"]),
+         minutes when is_integer(minutes) and minutes in 1..240 <- payload["minutes"] do
+      {:ok, "focus_allowance_opened", %{"actor_participant_id" => actor_id, "minutes" => minutes}}
+    else
+      _ -> {:error, :invalid_target}
+    end
+  end
+
+  defp command_target(_state, actor_id, :close_focus_allowance, payload) do
+    case Validation.exact_keys(payload, []) do
+      :ok -> {:ok, "focus_allowance_closed", %{"actor_participant_id" => actor_id}}
+      _ -> {:error, :invalid_target}
+    end
+  end
+
   defp command_target(_state, _actor_id, _name, _payload), do: {:error, :unknown_command}
 
   defp hand_event_name(true), do: "hand_raised"

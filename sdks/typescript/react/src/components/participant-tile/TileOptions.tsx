@@ -6,8 +6,8 @@ import { StageIcon } from "../stage/StageIcon";
 export type TileAction = { readonly label: string; readonly run: () => void };
 
 /** The tile's actions in menu order: the main one, then follow. */
-export function tileActions(main: { readonly label: string; readonly run?: () => void }, follow: { readonly label: string; readonly run?: () => void }): readonly TileAction[] {
-  return [main, follow].flatMap(({ label, run }) => (run ? [{ label, run }] : []));
+export function tileActions(main: { readonly label: string; readonly run?: () => void }, follow: { readonly label: string; readonly run?: () => void }, leading: readonly TileAction[] = []): readonly TileAction[] {
+  return [...leading, ...[main, follow].flatMap(({ label, run }) => (run ? [{ label, run }] : []))];
 }
 
 /** Where a tile's options live: the phone sheet when a tap on the tile opens it, else a menu button in the tile's corner that shows on hover. */

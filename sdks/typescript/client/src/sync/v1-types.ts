@@ -30,6 +30,9 @@ export const V1_CAPABILITIES = [
   "endEpisode",
   "manageMembers",
   "clearSpaceContent",
+  "focus.view",
+  "focus.manage",
+  "focus.exempt",
 ] as const;
 export type V1Capability = (typeof V1_CAPABILITIES)[number];
 // Roles are customer-defined; the wire accepts any non-empty role name.
@@ -98,6 +101,11 @@ export type V1Presence = {
   readonly activeSpeaker: boolean;
   /** How well this person's own link carries the call, as they rate it. Absent means unknown. */
   readonly connectionQuality?: "good" | "weak" | "poor";
+  /** Observable app state reported by this person. Absent means not reporting or not visible to you. */
+  readonly appState?: "active" | "inactive" | "background";
+  readonly windowed?: boolean;
+  readonly stepAwayReason?: "reading" | "notes" | "break";
+  readonly allowed?: boolean;
 };
 export type V1Projection<T> = {
   readonly projectionId: string;
@@ -159,6 +167,26 @@ export type V1TargetCommand =
       readonly payload: {
         readonly policy: V1AdmissionTarget;
       };
+    }
+  | {
+      readonly name: "set_focus_step_away";
+      readonly payload: {
+        readonly reason: "reading" | "notes" | "break";
+      };
+    }
+  | {
+      readonly name: "clear_focus_step_away";
+      readonly payload: Record<string, never>;
+    }
+  | {
+      readonly name: "open_focus_allowance";
+      readonly payload: {
+        readonly minutes: number;
+      };
+    }
+  | {
+      readonly name: "close_focus_allowance";
+      readonly payload: Record<string, never>;
     }
   | {
       readonly name: "assign_roles";
@@ -247,6 +275,7 @@ export type V1CollaborationClient = {
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
+export type V1AppStateObserver = (input: { readonly report: (state: "active" | "inactive" | "background", windowed: boolean) => void; readonly isScreenSharing: () => boolean }) => () => void;
 export type V1SyncClientOptions = {
   readonly traceparent?: string;
   readonly telemetry?: TelemetrySink;
@@ -276,6 +305,8 @@ export type V1SyncClientOptions = {
   readonly maxPendingCollaborationRequests?: number;
   /** Asks Sync to hold the entry until `confirmEntered()`; set it only when the caller will call that method. */
   readonly entryConfirmation?: boolean;
+  /** Native or embedded platform Focus detection. Browser detection is the default when omitted. */
+  readonly observeAppState?: V1AppStateObserver;
   /** The device this client runs on, shown to the other participants. Unset when the platform cannot tell. */
   readonly deviceKind?: ParticipantDeviceKind;
 };

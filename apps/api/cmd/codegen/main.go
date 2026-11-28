@@ -395,6 +395,16 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 	if isOptionalInt32(t) {
 		return map[string]any{"type": "integer"}
 	}
+	if isOptionalFocusSettings(t) {
+		return map[string]any{
+			"type":                 "object",
+			"required":             []string{"enabled"},
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"enabled": map[string]any{"type": "boolean"},
+			},
+		}
+	}
 	if isOptionalCORSOrigins(t) {
 		return map[string]any{
 			"type":     "array",
@@ -752,6 +762,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalStrings(t) ||
 		isOptionalInt64(t) ||
 		isOptionalInt32(t) ||
+		isOptionalFocusSettings(t) ||
 		isOptionalCORSOrigins(t) ||
 		isOptionalTimeRequest(t)
 }
@@ -810,6 +821,10 @@ func isOptionalInt64(t reflect.Type) bool {
 
 func isOptionalInt32(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(spaces.OptionalInt32{})
+}
+
+func isOptionalFocusSettings(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(spaces.OptionalFocusSettings{})
 }
 
 func isOptionalCORSOrigins(t reflect.Type) bool {

@@ -9,6 +9,12 @@ const GLYPHS = {
       <path d="M14 14h3v3M21 14v.01M17 21h4v-4M14 21v.01" />
     </>
   ),
+  window: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M3 9h18" />
+    </>
+  ),
   flag: <path d="M5 21V4M5 4h11.5l-2 4 2 4H5" />,
   keyboard: (
     <>

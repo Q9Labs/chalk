@@ -73,6 +73,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -105,6 +106,7 @@ func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpace
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -145,7 +147,8 @@ insert into episodes (
         'admission_policy', spaces.admission_policy,
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
-        'linger_window_seconds', spaces.linger_window_seconds
+        'linger_window_seconds', spaces.linger_window_seconds,
+        'focus', spaces.focus
     )
 from spaces
 where
@@ -287,6 +290,7 @@ insert into spaces (
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -306,12 +310,13 @@ select
     coalesce($10::text, 'automatic'),
     coalesce($11::text, tenant_facts.transcription_default_mode),
     $12::text,
-    $13,
+    coalesce($13::jsonb, '{"enabled":false}'::jsonb),
     $14,
     $15,
-    $16
+    $16,
+    $17
 from tenant_facts
-returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, focus, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -332,7 +337,7 @@ returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, m
                 'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
                 'requestMediaOthers', 'removeParticipant', 'manageRecording',
                 'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-                'clearSpaceContent'
+                'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
             ]::text[]
         ),
         (
@@ -355,7 +360,7 @@ returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, m
     select
         inserted.tenant_id,
         inserted.id,
-        $17,
+        $18,
         1,
         1,
         true,
@@ -381,6 +386,7 @@ select
     inserted.recording_policy,
     inserted.transcription_policy,
     inserted.transcript_language,
+    inserted.focus,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -404,6 +410,7 @@ type CreateSpaceParams struct {
 	RecordingPolicy               pgtype.Text `json:"recording_policy"`
 	TranscriptionPolicy           pgtype.Text `json:"transcription_policy"`
 	TranscriptLanguage            pgtype.Text `json:"transcript_language"`
+	Focus                         []byte      `json:"focus"`
 	DefaultEpisodeDurationSeconds int32       `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32       `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32       `json:"linger_window_seconds"`
@@ -426,6 +433,7 @@ type CreateSpaceRow struct {
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
 	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
+	Focus                         []byte             `json:"focus"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -449,6 +457,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		arg.RecordingPolicy,
 		arg.TranscriptionPolicy,
 		arg.TranscriptLanguage,
+		arg.Focus,
 		arg.DefaultEpisodeDurationSeconds,
 		arg.MaximumEpisodeDurationSeconds,
 		arg.LingerWindowSeconds,
@@ -471,6 +480,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -648,6 +658,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -684,6 +695,7 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -841,6 +853,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -909,6 +922,7 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 			&i.RecordingPolicy,
 			&i.TranscriptionPolicy,
 			&i.TranscriptLanguage,
+			&i.Focus,
 			&i.DefaultEpisodeDurationSeconds,
 			&i.MaximumEpisodeDurationSeconds,
 			&i.LingerWindowSeconds,
@@ -928,7 +942,7 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 }
 
 const listTenantSpacesByActivity = `-- name: ListTenantSpacesByActivity :many
-select s.id, s.name, s.tenant_id, s.slug, s.media_plane, s.media_plane_setting_written, s.media_plane_setting_against, s.media_plane_setting, s.metadata, s.recurring_policy, s.admission_policy, s.recording_policy, s.transcription_policy, s.transcript_language, s.default_episode_duration_seconds, s.maximum_episode_duration_seconds, s.linger_window_seconds, s.created_by_user_id, s.updated_at, s.created_at, s.archived_at, a.active_at
+select s.id, s.name, s.tenant_id, s.slug, s.media_plane, s.media_plane_setting_written, s.media_plane_setting_against, s.media_plane_setting, s.metadata, s.recurring_policy, s.admission_policy, s.recording_policy, s.transcription_policy, s.transcript_language, s.focus, s.default_episode_duration_seconds, s.maximum_episode_duration_seconds, s.linger_window_seconds, s.created_by_user_id, s.updated_at, s.created_at, s.archived_at, a.active_at
 from space_activity a
 join spaces s on s.tenant_id = a.tenant_id and s.id = a.space_id
 where
@@ -996,6 +1010,7 @@ func (q *Queries) ListTenantSpacesByActivity(ctx context.Context, arg ListTenant
 			&i.Space.RecordingPolicy,
 			&i.Space.TranscriptionPolicy,
 			&i.Space.TranscriptLanguage,
+			&i.Space.Focus,
 			&i.Space.DefaultEpisodeDurationSeconds,
 			&i.Space.MaximumEpisodeDurationSeconds,
 			&i.Space.LingerWindowSeconds,
@@ -1078,6 +1093,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1110,6 +1126,7 @@ func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpace
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -1136,7 +1153,7 @@ values
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent'
+        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
     ]::text[]
 ),
 (
@@ -1266,26 +1283,27 @@ set
         else recording_policy
     end,
     transcript_language = case when $17::boolean then $18::text else transcript_language end,
+    focus = case when $19::boolean then $20::jsonb else focus end,
     transcription_policy = case
-        when $19::boolean then $20::text
+        when $21::boolean then $22::text
         else transcription_policy
     end,
     default_episode_duration_seconds = case
-        when $21::boolean then $22::integer
+        when $23::boolean then $24::integer
         else default_episode_duration_seconds
     end,
     maximum_episode_duration_seconds = case
-        when $23::boolean then $24::integer
+        when $25::boolean then $26::integer
         else maximum_episode_duration_seconds
     end,
     linger_window_seconds = case
-        when $25::boolean then $26::integer
+        when $27::boolean then $28::integer
         else linger_window_seconds
     end,
     updated_at = now()
 where
-    tenant_id = $27
-    and id = $28
+    tenant_id = $29
+    and id = $30
 returning
     id,
     name,
@@ -1301,6 +1319,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1329,6 +1348,8 @@ type UpdateTenantSpaceParams struct {
 	RecordingPolicy                  string      `json:"recording_policy"`
 	TranscriptLanguageSet            bool        `json:"transcript_language_set"`
 	TranscriptLanguage               pgtype.Text `json:"transcript_language"`
+	FocusSet                         bool        `json:"focus_set"`
+	Focus                            []byte      `json:"focus"`
 	TranscriptionPolicySet           bool        `json:"transcription_policy_set"`
 	TranscriptionPolicy              string      `json:"transcription_policy"`
 	DefaultEpisodeDurationSecondsSet bool        `json:"default_episode_duration_seconds_set"`
@@ -1361,6 +1382,8 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		arg.RecordingPolicy,
 		arg.TranscriptLanguageSet,
 		arg.TranscriptLanguage,
+		arg.FocusSet,
+		arg.Focus,
 		arg.TranscriptionPolicySet,
 		arg.TranscriptionPolicy,
 		arg.DefaultEpisodeDurationSecondsSet,
@@ -1388,6 +1411,7 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
 		&i.TranscriptLanguage,
+		&i.Focus,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

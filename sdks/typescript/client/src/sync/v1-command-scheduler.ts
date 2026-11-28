@@ -347,6 +347,14 @@ function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
     case "set_admission_policy":
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "set_focus_step_away":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "clear_focus_step_away":
+      return { type: "command", command_id: commandId, name: command.name, payload: {} };
+    case "open_focus_allowance":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "close_focus_allowance":
+      return { type: "command", command_id: commandId, name: command.name, payload: {} };
     case "assign_roles":
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
   }

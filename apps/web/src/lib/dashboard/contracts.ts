@@ -5,6 +5,8 @@ import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
+import type { FocusDTO } from "./focus-contracts";
+export type { FocusDTO };
 import type { TalkTimeDTO } from "./talk-time";
 
 const id = z.uuid();
@@ -88,12 +90,14 @@ export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
 ]);
-const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);
+const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "focus:read", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);
 const eventType = z.enum([
   "episode.ended",
   "episode.started",
   "participant.joined",
   "participant.left",
+  "participant.focus_changed",
+  "focus.completed",
   "recording.started",
   "recording.completed",
   "recording.failed",
@@ -105,7 +109,7 @@ const eventType = z.enum([
   "space.restored",
   "space.updated",
 ]);
-const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(14) };
+const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(16) };
 const websiteOrigin = z
   .string()
   .max(2048)
@@ -192,7 +196,7 @@ export type CallPageDTO = {
   nextCursor: string | null;
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
-export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; talkTime: TalkTimeDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; focus: FocusDTO | null; talkTime: TalkTimeDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 /** One past session of one call, with what it kept. `recording` is the session's newest completed recording, else its newest. */
 export type SessionRowDTO = {
   spaceId: string;

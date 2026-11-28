@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { ConnectionLifecycleCapability } from "../connection";
 import type { ConnectionDependencies } from "../connection/dependencies";
 import { makeChatController, type ChatControllerEffects } from "./chat-controller";
+import { makeFocusController, type FocusControllerEffects } from "./focus-controller";
 import { makeMediaController, type MediaControllerEffects } from "./media-controller";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { makeOfflineActions, type OfflineActionsControllerEffects } from "./offline-actions";
@@ -17,6 +18,7 @@ export type ControllerEffects = {
   readonly offline: OfflineActionsControllerEffects;
   readonly chat: ChatControllerEffects;
   readonly participants: ParticipantsControllerEffects;
+  readonly focus: FocusControllerEffects;
   readonly reactions: ReactionsControllerEffects;
   readonly recording: RecordingControllerEffects;
   readonly whiteboard: WhiteboardControllerEffects;
@@ -38,9 +40,10 @@ export const makeControllerEffects = (input: {
     const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection);
     const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, offline: offlineActions });
     const participants = yield* makeParticipantsController(input.connection, input.store, offlineActions);
+    const focus = yield* makeFocusController(input.connection);
     const reactions = yield* makeReactionsController(input.connection, input.store);
     const recording = yield* makeRecordingController(input.connection, input.store);
     const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
     const presenting = yield* makePresentingController({ connection: input.connection, store: input.store, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch });
-    return { media, offline: offlineActions, chat, participants, reactions, recording, whiteboard, presenting };
+    return { media, offline: offlineActions, chat, participants, focus, reactions, recording, whiteboard, presenting };
   });

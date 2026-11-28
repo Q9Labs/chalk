@@ -15,6 +15,7 @@ import { makeControllerEffects, type ControllerEffects } from "./controller-effe
 import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
+import type { Participant } from "./participant-types";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl, normalizeBaseUrl } from "../urls";
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
@@ -102,7 +103,7 @@ export class SpaceClientCore {
   readonly #store: SpaceStore;
   readonly #handlers: {
     [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>>;
-  } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set(), callEvent: new Set() };
+  } = { participantJoined: new Set(), participantLeft: new Set(), focusChanged: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set(), callEvent: new Set() };
   #disposed = false;
   #episodeEnded = false;
   #previous: SpaceSnapshot;
@@ -203,6 +204,10 @@ export class SpaceClientCore {
     const after = new Map(next.participants.roster.map((participant) => [participant.participantId, participant]));
     for (const participant of after.values()) if (!before.has(participant.participantId)) this.#emit("participantJoined", { participant });
     for (const participant of before.values()) if (!after.has(participant.participantId)) this.#emit("participantLeft", { participant });
+    for (const participant of after.values()) {
+      const prior = before.get(participant.participantId);
+      if (prior && !sameFocus(prior.focus, participant.focus)) this.#emit("focusChanged", { participant });
+    }
   }
   #emitScreenShareChanges(previous: SpaceSnapshot, next: SpaceSnapshot): void {
     const previousShares = screenShares(previous);
@@ -225,6 +230,11 @@ export class SpaceClientCore {
     if (this.#disposed) throw new SpaceClientError({ code: "connection.invalid_state", recoverable: false, message: "The SpaceClient has been disposed. Rejoin the call." });
   }
 }
+const FOCUS_KEYS = ["appState", "windowed", "steppedAway", "allowed"] as const;
+function sameFocus(left: Participant["focus"], right: Participant["focus"]): boolean {
+  return FOCUS_KEYS.every((key) => left?.[key] === right?.[key]);
+}
+
 function liveClock(dependencies: ConnectionDependencies) {
   return Layer.succeed(Clock.Clock, {
     currentTimeMillisUnsafe: dependencies.clock.now,

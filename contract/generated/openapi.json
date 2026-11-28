@@ -9383,6 +9383,157 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/focus": {
+      "get": {
+        "operationId": "getEpisodeFocus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeFocus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get episode focus",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants": {
       "post": {
         "operationId": "admitEpisodeParticipant",
@@ -14946,6 +15097,8 @@
                   "endpoint.test",
                   "episode.ended",
                   "episode.started",
+                  "focus.completed",
+                  "participant.focus_changed",
                   "participant.joined",
                   "participant.left",
                   "recording.completed",
@@ -17190,6 +17343,16 @@
           "default_episode_duration_seconds": {
             "type": "integer"
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": ["object", "null"]
+          },
           "linger_window_seconds": {
             "type": "integer"
           },
@@ -17444,6 +17607,8 @@
                 "episode.started",
                 "participant.joined",
                 "participant.left",
+                "participant.focus_changed",
+                "focus.completed",
                 "recording.started",
                 "recording.completed",
                 "recording.failed",
@@ -17726,6 +17891,124 @@
           }
         },
         "required": ["episode_id", "status"],
+        "type": "object"
+      },
+      "EpisodeFocus": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_windows": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actor_participant_id": {
+                  "$ref": "#/components/schemas/ParticipantId"
+                },
+                "ended_at": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DateTimeString"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ends_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "started_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                }
+              },
+              "required": ["actor_participant_id", "ended_at", "ends_at", "started_at"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "episode_id": {
+            "$ref": "#/components/schemas/EpisodeId"
+          },
+          "participants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "away_time_seconds": {
+                  "type": "integer"
+                },
+                "display_name": {
+                  "type": "string"
+                },
+                "intervals": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "ended_at": {
+                        "$ref": "#/components/schemas/DateTimeString"
+                      },
+                      "started_at": {
+                        "$ref": "#/components/schemas/DateTimeString"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "windowed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["ended_at", "started_at", "state", "windowed"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "longest_away_seconds": {
+                  "type": "integer"
+                },
+                "participant_id": {
+                  "$ref": "#/components/schemas/ParticipantId"
+                },
+                "reporting_coverage_ratio": {
+                  "type": "number"
+                },
+                "reporting_coverage_seconds": {
+                  "type": "integer"
+                },
+                "step_aways": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "ended_at": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/DateTimeString"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "started_at": {
+                        "$ref": "#/components/schemas/DateTimeString"
+                      }
+                    },
+                    "required": ["ended_at", "reason", "started_at"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "times_away": {
+                  "type": "integer"
+                }
+              },
+              "required": ["away_time_seconds", "display_name", "intervals", "longest_away_seconds", "participant_id", "reporting_coverage_ratio", "reporting_coverage_seconds", "step_aways", "times_away"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["allow_windows", "episode_id", "participants"],
         "type": "object"
       },
       "EpisodeId": {
@@ -19516,6 +19799,16 @@
             "enum": ["chalk_sfu", null],
             "type": ["string", "null"]
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": "object"
+          },
           "id": {
             "$ref": "#/components/schemas/SpaceId"
           },
@@ -19698,6 +19991,7 @@
           "created_by_user_id",
           "default_episode_duration_seconds",
           "effective_media_plane",
+          "focus",
           "id",
           "linger_window_seconds",
           "maximum_episode_duration_seconds",
@@ -21251,6 +21545,16 @@
           "default_episode_duration_seconds": {
             "type": "integer"
           },
+          "focus": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": ["enabled"],
+            "type": "object"
+          },
           "linger_window_seconds": {
             "type": "integer"
           },
@@ -21610,6 +21914,8 @@
                 "episode.started",
                 "participant.joined",
                 "participant.left",
+                "participant.focus_changed",
+                "focus.completed",
                 "recording.started",
                 "recording.completed",
                 "recording.failed",
@@ -21858,6 +22164,8 @@
                 "episode.started",
                 "participant.joined",
                 "participant.left",
+                "participant.focus_changed",
+                "focus.completed",
                 "recording.started",
                 "recording.completed",
                 "recording.failed",
@@ -21937,6 +22245,8 @@
                 "episode.started",
                 "participant.joined",
                 "participant.left",
+                "participant.focus_changed",
+                "focus.completed",
                 "recording.started",
                 "recording.completed",
                 "recording.failed",

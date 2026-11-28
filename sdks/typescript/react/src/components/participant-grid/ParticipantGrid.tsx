@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import type { TileAction } from "../participant-tile/TileOptions";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { UserGroupIcon } from "../../utils/icons";
 import { ChalkBadge, ChalkEmptyState } from "../chalk-ui";
@@ -8,6 +9,7 @@ import { toVideoParticipants } from "../../selectors/space-selectors";
 import { Stage } from "../stage/Stage";
 import { buildStageItems, type StageItem } from "../stage/stage-items";
 
+export type TileFocus = { readonly appState?: "active" | "inactive" | "background"; readonly windowed?: boolean; readonly steppedAway?: "reading" | "notes" | "break"; readonly allowed?: boolean };
 export interface Participant {
   id: string;
   displayName: string;
@@ -32,6 +34,9 @@ export interface Participant {
   isVideoPausedForNetwork?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
+  focus?: TileFocus;
+  /** Extra actions in this tile's own menu, such as Focus step-away controls. */
+  focusActions?: readonly TileAction[];
   handRaiseOrder?: number;
   screenShareHasAudio?: boolean;
   screenShareAspect?: number;

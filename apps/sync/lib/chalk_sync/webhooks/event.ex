@@ -7,7 +7,13 @@ defmodule ChalkSync.Webhooks.Event do
 
   @spec encode!(String.t(), String.t(), String.t(), DateTime.t(), map()) :: binary()
   def encode!(event_id, event_name, tenant_id, occurred_at, object)
-      when event_name in ["participant.joined", "participant.left", "episode.ended"] do
+      when event_name in [
+             "participant.joined",
+             "participant.left",
+             "episode.ended",
+             "focus.completed",
+             "participant.focus_changed"
+           ] do
     validate_uuid!(event_id, :event_id)
     validate_uuid!(tenant_id, :tenant_id)
     validate_datetime!(occurred_at, :occurred_at)
@@ -62,7 +68,20 @@ defmodule ChalkSync.Webhooks.Event do
     )
   end
 
-  defp encode_object("episode.ended", object) do
+  defp encode_object("participant.focus_changed", object) do
+    encode_fields([
+      {"id", object.id},
+      {"identity_id", object.identity_id},
+      {"space_id", object.space_id},
+      {"episode_id", object.episode_id},
+      {"app_state", object.app_state},
+      {"windowed", object.windowed},
+      {"since", nullable_timestamp(object.since)}
+    ])
+  end
+
+  defp encode_object(event_name, object)
+       when event_name in ["episode.ended", "focus.completed"] do
     encode_fields([
       {"id", object.id},
       {"space_id", object.space_id},
@@ -78,8 +97,9 @@ defmodule ChalkSync.Webhooks.Event do
   # ended Episodes whose started_at is null.
   # Legacy Episodes can lack started_at. Match the API snapshot fallback while
   # retaining the webhook contract's non-null timestamp.
-  defp normalize_object("episode.ended", %{started_at: nil, created_at: created_at} = object),
-    do: %{object | started_at: created_at}
+  defp normalize_object(event_name, %{started_at: nil, created_at: created_at} = object)
+       when event_name in ["episode.ended", "focus.completed"],
+       do: %{object | started_at: created_at}
 
   defp normalize_object(_event_name, object), do: object
 
@@ -102,7 +122,21 @@ defmodule ChalkSync.Webhooks.Event do
     end
   end
 
-  defp validate_object!("episode.ended", object) when is_map(object) do
+  defp validate_object!("participant.focus_changed", object) when is_map(object) do
+    validate_uuid!(Map.get(object, :id), :participant_id)
+    validate_nullable_uuid!(Map.get(object, :identity_id), :identity_id)
+    validate_uuid!(Map.get(object, :space_id), :space_id)
+    validate_uuid!(Map.get(object, :episode_id), :episode_id)
+
+    unless Map.get(object, :app_state) in ["active", "inactive", "background"] and
+             is_boolean(Map.get(object, :windowed)),
+           do: invalid!(:focus_state)
+
+    validate_datetime!(Map.get(object, :since), :since)
+  end
+
+  defp validate_object!(event_name, object)
+       when event_name in ["episode.ended", "focus.completed"] and is_map(object) do
     validate_uuid!(Map.get(object, :id), :episode_id)
     validate_uuid!(Map.get(object, :space_id), :space_id)
 

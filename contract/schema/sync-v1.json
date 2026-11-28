@@ -148,7 +148,7 @@
     },
     {
       "id": "live",
-      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
+      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "app_state_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 5
@@ -186,7 +186,10 @@
     "extendEpisode",
     "endEpisode",
     "manageMembers",
-    "clearSpaceContent"
+    "clearSpaceContent",
+    "focus.view",
+    "focus.manage",
+    "focus.exempt"
   ],
   "policy": {
     "defaultRoles": ["owner", "collaborator", "observer"],
@@ -214,7 +217,10 @@
         "extendEpisode",
         "endEpisode",
         "manageMembers",
-        "clearSpaceContent"
+        "clearSpaceContent",
+        "focus.view",
+        "focus.manage",
+        "focus.exempt"
       ],
       "collaborator": ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "sendChat", "sendReaction", "drawWhiteboard"],
       "observer": ["subscribe", "sendReaction"]
@@ -276,7 +282,7 @@
       "additionalProperties": true,
       "values": {
         "kind": "array",
-        "maxItems": 23,
+        "maxItems": 26,
         "of": "capability"
       }
     },
@@ -337,7 +343,7 @@
         },
         "capabilities": {
           "kind": "array",
-          "maxItems": 23,
+          "maxItems": 26,
           "of": "capability"
         }
       }
@@ -453,6 +459,12 @@
       "optional": true,
       "value": true,
       "description": "Present on a connection that negotiated connection_quality=1: this Sync accepts connection_quality_set and sends connection_quality on presence items. A client that does not see it must not send the frame."
+    },
+    "appState": {
+      "wireName": "app_state",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated app_state=1 while the Episode config enables app-state reporting: this Sync accepts app_state_set and sends app-state fields on presence items. A client that does not see it must not send the frame."
     },
     "screenAnnotation": {
       "wireName": "screen_annotation",
@@ -591,6 +603,42 @@
           "trimmedNonEmpty": true
         }
       }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "set_focus_step_away",
+      "capability": "subscribe",
+      "payload": {
+        "reason": ["reading", "notes", "break"]
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "clear_focus_step_away",
+      "capability": "subscribe",
+      "payload": {}
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "open_focus_allowance",
+      "capability": "focus.manage",
+      "payload": {
+        "minutes": {
+          "kind": "integer",
+          "minimum": 1,
+          "maximum": 240
+        }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "close_focus_allowance",
+      "capability": "focus.manage",
+      "payload": {}
     }
   ],
   "operations": [
@@ -1152,6 +1200,40 @@
           "nullable": true
         }
       }
+    },
+    {
+      "name": "focus_step_away_set",
+      "origin": "command",
+      "payload": {
+        "participantId": "uuid",
+        "reason": ["reading", "notes", "break"]
+      }
+    },
+    {
+      "name": "focus_step_away_cleared",
+      "origin": "command",
+      "payload": {
+        "participantId": "uuid"
+      }
+    },
+    {
+      "name": "focus_allowance_opened",
+      "origin": "command",
+      "payload": {
+        "actorParticipantId": "uuid",
+        "minutes": {
+          "kind": "integer",
+          "minimum": 1,
+          "maximum": 240
+        }
+      }
+    },
+    {
+      "name": "focus_allowance_closed",
+      "origin": "command",
+      "payload": {
+        "actorParticipantId": "uuid"
+      }
     }
   ],
   "eventFrame": {
@@ -1233,7 +1315,7 @@
         "kind": "array",
         "maxItems": 500,
         "exactFields": ["participant_id", "state", "speaking", "active_speaker"],
-        "optionalFields": ["identity_id", "device_type", "device_kind", "admission_revision", "connection_quality"],
+        "optionalFields": ["identity_id", "device_type", "device_kind", "admission_revision", "connection_quality", "focus_app_state", "focus_windowed", "focus_step_away_reason", "focus_allowed"],
         "connectionQuality": ["good", "weak", "poor"],
         "identityId": "uuid",
         "deviceType": ["phone", "tablet", "computer"],
@@ -1249,7 +1331,16 @@
         "activeSpeaker": {
           "kind": "boolean"
         },
-        "invariant": "disconnected_implies_not_speaking_and_not_active_speaker"
+        "invariant": "disconnected_implies_not_speaking_and_not_active_speaker",
+        "appState": ["active", "inactive", "background"],
+        "windowed": {
+          "kind": "boolean"
+        },
+        "stepAwayReason": ["reading", "notes", "break"],
+        "allowed": {
+          "kind": "boolean"
+        },
+        "appStateNegotiation": "app_state=1 WebSocket query opts into app-state reporting. focus_app_state and focus_windowed describe the reporting connection; focus_step_away_reason and focus_allowed are neutral declared states. All are omitted when unset, when the Episode config disables reporting, and for older clients. Non-viewers receive only their own fields."
       }
     },
     "presenceEvent": {
@@ -1306,6 +1397,16 @@
     "exactFields": ["type", "quality"],
     "quality": ["good", "weak", "poor"],
     "description": "A guest rates their own link; the rating rides the presence stream until they disconnect. Sent only on a connection whose welcome carried connection_quality, and only when the rating changes."
+  },
+  "appStateSet": {
+    "direction": "client-to-server",
+    "type": "app_state_set",
+    "exactFields": ["type", "state", "windowed"],
+    "state": ["active", "inactive", "background"],
+    "windowed": {
+      "kind": "boolean"
+    },
+    "description": "A guest reports whether Chalk is visible and focused on this connection. Sent only on a connection whose welcome carried app_state, and only after a changed state has held for the client grace period. No state means not reporting, never away."
   },
   "ping": {
     "direction": "client-to-server",

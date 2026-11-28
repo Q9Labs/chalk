@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { ChalkButton } from "../chalk-ui";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { RowIcon } from "./RowIcon";
+import { FocusAllowanceRow } from "./FocusAllowanceRow";
 import type { CallHostControls } from "./space-header-contract";
 
 const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
@@ -9,6 +10,7 @@ const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}
 /** The host-only rows, with the hairline above them. A menu without host controls gets nothing. */
 export function HostControlRows({ controls }: { readonly controls?: CallHostControls }) {
   const muteEveryone = controls?.muteEveryone;
+  const focusAllowance = controls?.focusAllowance;
   const [confirming, setConfirming] = useState(false);
   const [muting, setMuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
     }
   };
 
-  if (!muteEveryone) return null;
+  if (!muteEveryone && !focusAllowance) return null;
 
   return (
     <>
@@ -74,6 +76,7 @@ export function HostControlRows({ controls }: { readonly controls?: CallHostCont
           </div>
         </>
       ) : null}
+      {focusAllowance ? <FocusAllowanceRow allowance={focusAllowance} /> : null}
       {error ? (
         <p role="alert" className="chalk-shell-detail-error">
           {error}

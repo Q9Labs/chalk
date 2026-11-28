@@ -84,7 +84,7 @@ var capabilityOrder = []string{
 	"publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf",
 	"sendChat", "sendReaction", "drawWhiteboard", "manageWhiteboard", "manageAdmission", "assignRoles",
 	"muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant",
-	"manageRecording", "startEpisode", "extendEpisode", "endEpisode", "manageMembers", "clearSpaceContent",
+	"manageRecording", "startEpisode", "extendEpisode", "endEpisode", "manageMembers", "clearSpaceContent", "focus.view", "focus.manage", "focus.exempt",
 }
 
 var validCapabilities = func() map[string]struct{} {
@@ -98,6 +98,7 @@ var validCapabilities = func() map[string]struct{} {
 type Repository interface {
 	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]LobbyParticipant, error)
 	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]AttendanceParticipant, error)
+	GetEpisodeFocus(context.Context, utilities.ID, utilities.ID, utilities.ID) (FocusArtifact, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]SpaceLiveEpisode, error)
 	ListSpaceActivity(context.Context, utilities.ID, []utilities.ID) ([]SpaceActivity, error)
 	CreateEpisode(context.Context, CreateEpisodeInput) (Episode, error)

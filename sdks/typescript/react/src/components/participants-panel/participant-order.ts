@@ -3,6 +3,7 @@ import type { ParticipantListParticipant } from "./ParticipantsPanel";
 export interface ParticipantGroups {
   readonly you: readonly ParticipantListParticipant[];
   readonly hands: readonly ParticipantListParticipant[];
+  readonly notFocused: readonly ParticipantListParticipant[];
   readonly others: readonly ParticipantListParticipant[];
 }
 
@@ -13,10 +14,13 @@ export interface ParticipantGroups {
 export function orderParticipants(participants: readonly ParticipantListParticipant[]): ParticipantGroups {
   const others = participants.filter((person) => !person.isLocal);
   const hands = others.filter((person) => person.isHandRaised).sort((a, b) => (a.handOrder ?? Infinity) - (b.handOrder ?? Infinity));
-  const rest = others.filter((person) => !person.isHandRaised);
+  const withoutHands = others.filter((person) => !person.isHandRaised);
+  const notFocused = withoutHands.filter((person) => person.notFocused);
+  const rest = withoutHands.filter((person) => !person.notFocused);
   return {
     you: participants.filter((person) => person.isLocal),
     hands,
+    notFocused,
     others: [...rest.filter((person) => person.isHost), ...rest.filter((person) => !person.isHost)],
   };
 }

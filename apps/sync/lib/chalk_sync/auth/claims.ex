@@ -35,12 +35,12 @@ defmodule ChalkSync.Auth.Claims do
           capabilities: [String.t()]
         }
 
-  @capabilities ~w(publishAudio publishVideo publishScreen subscribe raiseHand renameSelf sendChat sendReaction drawWhiteboard manageWhiteboard manageAdmission assignRoles muteOthers stopVideoOthers stopScreenOthers requestMediaOthers removeParticipant manageRecording startEpisode extendEpisode endEpisode manageMembers clearSpaceContent)
+  @capabilities ~w(publishAudio publishVideo publishScreen subscribe raiseHand renameSelf sendChat sendReaction drawWhiteboard manageWhiteboard manageAdmission assignRoles muteOthers stopVideoOthers stopScreenOthers requestMediaOthers removeParticipant manageRecording startEpisode extendEpisode endEpisode manageMembers clearSpaceContent focus.view focus.manage focus.exempt)
 
   @spec valid_authorization?(term(), term()) :: boolean()
   def valid_authorization?(role, capabilities) do
     is_binary(role) and byte_size(role) in 1..64 and role == String.trim(role) and
-      is_list(capabilities) and length(capabilities) <= 23 and
+      is_list(capabilities) and length(capabilities) <= 26 and
       Enum.uniq(capabilities) == capabilities and Enum.all?(capabilities, &(&1 in @capabilities))
   end
 end

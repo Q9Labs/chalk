@@ -5,6 +5,14 @@ import type { CallNetwork } from "./call-network";
 export interface CallHostControls {
   /** How many other people are unmuted, and the way to mute them all. */
   readonly muteEveryone?: { readonly unmutedCount: number; readonly onMute: () => Promise<void> };
+  /** Focus allowance control for holders of focus.manage. */
+  readonly focusAllowance?: {
+    readonly active: boolean;
+    /** Set when this tab opened the allowance, so the menu can count down. A reload loses it and the menu shows "Allowed" without a time. */
+    readonly until?: { readonly endsAtMs: number; readonly minutes: number };
+    readonly onAllow: (minutes: number) => Promise<void>;
+    readonly onEnd: () => Promise<void>;
+  };
 }
 
 export interface SpaceHeaderProps {

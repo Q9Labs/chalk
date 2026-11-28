@@ -15,7 +15,7 @@ export function renderElixirCommandPayloads(commands) {
     const fields = Object.entries(command.payload).map(([name, field]) => [snakeCase(name), field]);
     const pattern = fields.map(([name]) => `${JSON.stringify(name)} => ${name}`).join(", ");
     const keys = fields.map(([name]) => name);
-    const checks = fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
+    const checks = fields.length === 0 ? "true" : fields.map(([name, field]) => renderElixirFieldCheck(field, name)).join(" and ");
     return [`  defp valid_command_payload?(${JSON.stringify(command.name)}, %{${pattern}} = payload) do`, `    exact_keys?(payload, ${renderElixirValue(keys)}) and ${checks}`, "  end", ""];
   });
 }

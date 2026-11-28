@@ -23,6 +23,7 @@ import { AppState, Platform } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
 import { nativeDeviceKind } from "../platform/device-kind";
 import { createNativeAnnotationCapture } from "../screen-annotation/native-annotation-capture";
+import { observeNativeFocus } from "./focus-native";
 import { createNativeCallSyncLifecycle } from "./native-call-sync-lifecycle";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
@@ -187,6 +188,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     webSocket,
     dialTimeoutMs,
     entryConfirmation: true,
+    observeAppState: observeNativeFocus,
     deviceKind: nativeDeviceKind(),
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });

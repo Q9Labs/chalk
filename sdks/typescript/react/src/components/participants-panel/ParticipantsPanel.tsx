@@ -1,3 +1,5 @@
+import { FOCUS_COPY } from "../focus/focus-copy";
+import { effectiveFocus } from "../../selectors/space-selectors";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { deviceHint } from "@q9labsai/chalk-client";
@@ -27,6 +29,8 @@ export interface ParticipantListParticipant {
   isMuted?: boolean;
   isVideoEnabled?: boolean;
   isHandRaised?: boolean;
+  focusLabel?: string;
+  notFocused?: boolean;
   /** Place in the queue of raised hands, counting from 1. */
   handOrder?: number;
   isSpeaking?: boolean;
@@ -179,6 +183,8 @@ export const ParticipantsPanelSurface = React.memo(
               {groups.you.map((person) => row(person))}
               {labelled && groups.hands.length ? <PeopleLabel text="Raised hands" count={groups.hands.length} /> : null}
               {groups.hands.map((person) => row(person))}
+              {labelled && groups.notFocused.length ? <PeopleLabel text={FOCUS_COPY.notFocused} count={groups.notFocused.length} /> : null}
+              {groups.notFocused.map((person) => row(person))}
               {labelled && groups.others.length ? <PeopleLabel text="In the call" count={groups.others.length} /> : null}
               {groups.others.map((person) => row(person))}
             </>
@@ -188,6 +194,15 @@ export const ParticipantsPanelSurface = React.memo(
     );
   },
 );
+
+function focusLabel(focus: import("@q9labsai/chalk-client").ParticipantFocus | undefined): string | undefined {
+  if (!focus) return undefined;
+  if (focus.steppedAway) return `${FOCUS_COPY.steppedAway} · ${FOCUS_COPY.reasons[focus.steppedAway]}`;
+  if (focus.allowed && focus.appState !== "active") return FOCUS_COPY.allowed;
+  if (focus.appState === "background") return FOCUS_COPY.notFocused;
+  if (focus.appState === "inactive") return focus.windowed ? FOCUS_COPY.splitView : FOCUS_COPY.otherWindow;
+  return undefined;
+}
 
 function useParticipantVolumes(props: ParticipantsPanelProps) {
   const contextVolumeState = useParticipantVolumeContext();
@@ -237,6 +252,11 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
         isMuted: participant.media.microphone !== "active",
         isVideoEnabled: participant.media.camera === "active",
         isHandRaised: participant.handRaised,
+        focusLabel: focusLabel(effectiveFocus(participant, participantsSlice.roster)),
+        notFocused: (() => {
+          const focus = effectiveFocus(participant, participantsSlice.roster);
+          return !focus?.allowed && !focus?.steppedAway && focus?.appState !== undefined && focus.appState !== "active";
+        })(),
         handOrder: handOrders.get(participant.participantId),
         isSpeaking: participant.presence.speaking,
         isReconnecting: participant.presence.state === "disconnected",

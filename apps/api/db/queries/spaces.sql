@@ -43,6 +43,7 @@ insert into spaces (
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -62,6 +63,7 @@ select
     coalesce(sqlc.narg(recording_policy)::text, 'automatic'),
     coalesce(sqlc.narg(transcription_policy)::text, tenant_facts.transcription_default_mode),
     sqlc.narg(transcript_language)::text,
+    coalesce(sqlc.narg(focus)::jsonb, '{"enabled":false}'::jsonb),
     sqlc.arg(default_episode_duration_seconds),
     sqlc.arg(maximum_episode_duration_seconds),
     sqlc.arg(linger_window_seconds),
@@ -88,7 +90,7 @@ returning *
                 'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
                 'requestMediaOthers', 'removeParticipant', 'manageRecording',
                 'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-                'clearSpaceContent'
+                'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
             ]::text[]
         ),
         (
@@ -137,6 +139,7 @@ select
     inserted.recording_policy,
     inserted.transcription_policy,
     inserted.transcript_language,
+    inserted.focus,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -161,7 +164,7 @@ values
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent'
+        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
     ]::text[]
 ),
 (
@@ -214,6 +217,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -242,6 +246,7 @@ select
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -330,6 +335,7 @@ set
         else recording_policy
     end,
     transcript_language = case when sqlc.arg(transcript_language_set)::boolean then sqlc.narg(transcript_language)::text else transcript_language end,
+    focus = case when sqlc.arg(focus_set)::boolean then sqlc.narg(focus)::jsonb else focus end,
     transcription_policy = case
         when sqlc.arg(transcription_policy_set)::boolean then sqlc.arg(transcription_policy)::text
         else transcription_policy
@@ -365,6 +371,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -395,6 +402,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -425,6 +433,7 @@ returning
     recording_policy,
     transcription_policy,
     transcript_language,
+    focus,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -462,7 +471,8 @@ insert into episodes (
         'admission_policy', spaces.admission_policy,
         'default_episode_duration_seconds', spaces.default_episode_duration_seconds,
         'maximum_episode_duration_seconds', spaces.maximum_episode_duration_seconds,
-        'linger_window_seconds', spaces.linger_window_seconds
+        'linger_window_seconds', spaces.linger_window_seconds,
+        'focus', spaces.focus
     )
 from spaces
 where

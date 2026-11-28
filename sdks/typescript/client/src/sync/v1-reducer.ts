@@ -37,7 +37,7 @@ export async function applyV1Event(state: V1ControlState, event: EventFrame): Pr
   if (event.base_revision !== state.revision || event.revision !== state.revision + 1) throw new V1ReplicaError("control event is not exact-next");
   if (event.schema_version !== state.stateSchemaVersion) throw new V1ReplicaError("control event schema version changed");
 
-  const next = reduceEvent(state, event);
+  const next = isFocusEvent(event) ? state : reduceEvent(state, event);
   const candidate = { ...next, revision: event.revision, stateDigest: event.resulting_state_digest };
   assertV1ControlSemantics(candidate);
   await assertDigest(candidate);
@@ -45,7 +45,7 @@ export async function applyV1Event(state: V1ControlState, event: EventFrame): Pr
 }
 
 export function optimisticV1Control(state: V1ControlState, actorId: string, commands: readonly V1TargetCommand[]): V1ControlState {
-  return commands.reduce((current, command) => applyOptimistic(current, actorId, command), state);
+  return commands.reduce((current, command) => (isFocusCommand(command) ? current : applyOptimistic(current, actorId, command)), state);
 }
 
 export function snapshotToState(snapshot: Snapshot): V1ControlState {
@@ -166,7 +166,21 @@ async function assertDigest(state: V1ControlState): Promise<void> {
   if ((await computeV1StateDigest(state)) !== state.stateDigest) throw new V1StateDigestMismatchError();
 }
 
-function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
+const FOCUS_EVENTS: ReadonlySet<string> = new Set(["focus_step_away_set", "focus_step_away_cleared", "focus_allowance_opened", "focus_allowance_closed"]);
+const FOCUS_COMMANDS: ReadonlySet<string> = new Set(["set_focus_step_away", "clear_focus_step_away", "open_focus_allowance", "close_focus_allowance"]);
+
+/** Focus state lives in presence and the Episode artifact, so these events and commands leave the control state unchanged. */
+type FocusEventFrame = Extract<EventFrame, { name: "focus_step_away_set" | "focus_step_away_cleared" | "focus_allowance_opened" | "focus_allowance_closed" }>;
+type FocusCommand = Extract<V1TargetCommand, { name: "set_focus_step_away" | "clear_focus_step_away" | "open_focus_allowance" | "close_focus_allowance" }>;
+function isFocusEvent(event: EventFrame): event is FocusEventFrame {
+  return FOCUS_EVENTS.has(event.name);
+}
+
+function isFocusCommand(command: V1TargetCommand): command is FocusCommand {
+  return FOCUS_COMMANDS.has(command.name);
+}
+
+function reduceEvent(state: V1ControlState, event: Exclude<EventFrame, FocusEventFrame>): V1ControlState {
   switch (event.name) {
     case "participant_joined": {
       if (state.participants.some((participant) => participant.participantId === event.payload.participant_id)) throw new V1ReplicaError("duplicate participant join");
@@ -210,7 +224,7 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
   }
 }
 
-function applyOptimistic(state: V1ControlState, actorId: string, command: V1TargetCommand): V1ControlState {
+function applyOptimistic(state: V1ControlState, actorId: string, command: Exclude<V1TargetCommand, FocusCommand>): V1ControlState {
   switch (command.name) {
     case "set_hand_raised":
       return updateParticipant(state, actorId, (participant) => ({ ...participant, handRaised: command.payload.raised }), false);

@@ -14,6 +14,19 @@ defmodule ChalkSync.Transport.Socket.LiveRequests do
     "set_screen_share_enabled" => "screen"
   }
 
+  def app_state(app_state, windowed, %{phase: :live, app_state: true} = state) do
+    case Coordinator.set_app_state(state.coordinator, state.identity, app_state, windowed, self()) do
+      :ok -> {:ok, state}
+      {:error, reason} -> Frames.protocol_error(reason, state)
+    end
+  end
+
+  def app_state(_app_state, _windowed, %{phase: :live} = state),
+    do: Frames.protocol_error(:app_state_not_negotiated, state)
+
+  def app_state(_app_state, _windowed, state),
+    do: Frames.protocol_error(:recovery_required, state)
+
   def live_target(target, %{phase: :live} = state) do
     state = stamp_intent(state, target)
     answer(Coordinator.live_target(state.coordinator, state.identity, target, self()), state)

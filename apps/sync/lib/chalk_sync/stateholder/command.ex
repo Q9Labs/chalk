@@ -9,7 +9,11 @@ defmodule ChalkSync.Stateholder.Command do
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
-    "assign_roles" => :assign_roles
+    "assign_roles" => :assign_roles,
+    "set_focus_step_away" => :set_focus_step_away,
+    "clear_focus_step_away" => :clear_focus_step_away,
+    "open_focus_allowance" => :open_focus_allowance,
+    "close_focus_allowance" => :close_focus_allowance
   }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
@@ -21,7 +25,11 @@ defmodule ChalkSync.Stateholder.Command do
             :set_hand_raised
             | :set_display_name
             | :set_admission_policy
-            | :assign_roles,
+            | :assign_roles
+            | :set_focus_step_away
+            | :clear_focus_step_away
+            | :open_focus_allowance
+            | :close_focus_allowance,
           payload: map(),
           fingerprint: binary(),
           normalized_bytes: pos_integer(),
@@ -95,6 +103,18 @@ defmodule ChalkSync.Stateholder.Command do
        do: :ok,
        else: {:error, :invalid_payload}
   end
+
+  defp validate_payload(:set_focus_step_away, %{"reason" => reason} = payload)
+       when map_size(payload) == 1 and reason in ["reading", "notes", "break"],
+       do: :ok
+
+  defp validate_payload(:clear_focus_step_away, payload) when map_size(payload) == 0, do: :ok
+
+  defp validate_payload(:open_focus_allowance, %{"minutes" => minutes} = payload)
+       when map_size(payload) == 1 and is_integer(minutes) and minutes in 1..240,
+       do: :ok
+
+  defp validate_payload(:close_focus_allowance, payload) when map_size(payload) == 0, do: :ok
 
   defp validate_payload(_name, _payload), do: {:error, :invalid_payload}
 end

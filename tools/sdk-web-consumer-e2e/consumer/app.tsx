@@ -7,6 +7,7 @@ import { ToastLayeringFixture } from "./toast-layering";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
 import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone, peerStates } from "./resource-ledger";
+import { fixtureFocusCommands } from "./focus-commands";
 import { bindFixtureSyncClient, FixtureSyncClient } from "./sync-client";
 
 type Harness = {
@@ -53,7 +54,7 @@ const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
       clock: fixtureClock,
       mediaDevices: fixtureMediaDevices,
       createMediaClient: (input) => bindFixtureMediaClient(new FixtureMediaClient(`${socketBaseURL}/media`, input)),
-      createSyncClient: (input) => bindFixtureSyncClient(new FixtureSyncClient(`${socketBaseURL}/sync`, input)),
+      createSyncClient: (input) => ({ ...bindFixtureSyncClient(new FixtureSyncClient(`${socketBaseURL}/sync`, input)), ...fixtureFocusCommands }),
       createChatFileTransport: (input) => createChalkChatFileHttpTransport({ baseUrl: location.origin, token: input.token }),
     },
   });

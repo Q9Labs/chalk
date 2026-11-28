@@ -10,6 +10,12 @@ export type ParticipantPresence = {
   /** How well this person's own link carries the call, as they rate it. Absent when unknown. */
   readonly connectionQuality?: import("../media/link-quality").LinkTier;
 };
+export type ParticipantFocus = {
+  readonly appState?: "active" | "inactive" | "background";
+  readonly windowed?: boolean;
+  readonly steppedAway?: "reading" | "notes" | "break";
+  readonly allowed?: boolean;
+};
 export type Participant = {
   /** Whether this seat belongs to a person or an admitted agent. Absent on older Sync connections. */
   readonly identityKind?: "user" | "agent" | "guest";
@@ -28,6 +34,7 @@ export type Participant = {
   readonly handRaised: boolean;
   readonly media: ChalkParticipantMediaState;
   readonly presence: ParticipantPresence;
+  readonly focus?: ParticipantFocus;
 };
 export type AdmissionRequest = {
   readonly requestId: string;

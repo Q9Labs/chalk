@@ -31,6 +31,10 @@ export function presenceItem(item: typeof PresenceProjectionItemSchema.Type): V1
     speaking: item.speaking,
     activeSpeaker: item.active_speaker,
     ...(item.connection_quality === undefined ? {} : { connectionQuality: item.connection_quality }),
+    ...(item.focus_app_state === undefined ? {} : { appState: item.focus_app_state }),
+    ...(item.focus_windowed === undefined ? {} : { windowed: item.focus_windowed }),
+    ...(item.focus_step_away_reason === undefined ? {} : { stepAwayReason: item.focus_step_away_reason }),
+    ...(item.focus_allowed === undefined ? {} : { allowed: item.focus_allowed }),
   };
 }
 

@@ -1,0 +1,22 @@
+/** Every user-facing Focus string in the React SDK. */
+export const FOCUS_COPY = {
+  on: "Focus on",
+  focused: "Focused",
+  notFocused: "Not focused",
+  otherWindow: "Other window",
+  splitView: "Split View",
+  allowed: "Allowed",
+  steppedAway: "Stepped away",
+  stepAway: "Step away",
+  imBack: "I’m back",
+  reasons: { reading: "Reading", notes: "Notes", break: "Break" },
+  allowOtherTabs: "Allow other tabs",
+  allowOtherTabsHelp: "Leaving Chalk won't count as away for a set time.",
+  endAllow: "End allowance",
+  allowanceOff: "Off",
+  timeLeft: (clock: string) => `${clock} left`,
+  allowanceOn: "Other tabs are allowed",
+  noticeTitle: "Focus is on",
+  noticeBody: "People in this call can see when you leave this window or app. They never see what's on your screen.",
+  noticeConfirm: "Got it",
+} as const;
