@@ -1,6 +1,7 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
+import { useJoinRefusals } from "../device-access/useJoinRefusals";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { callLimitMessage, type ChalkWhiteboardView, type ChatUploadFile, type ClientFailure } from "@q9labsai/chalk-client";
@@ -263,6 +264,8 @@ export function SpaceView({
     },
     [deviceAccess],
   );
+  const turnOnAfterJoin = useCallback((device: "microphone" | "camera") => runCommand(() => (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)), device, "start"), [runCommand, client]);
+  useJoinRefusals(deviceAccess, connection.lastError, turnOnAfterJoin);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;

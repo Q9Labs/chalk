@@ -172,7 +172,20 @@ export function useConnectedControlBarBehavior(props: ConnectedControlBarProps):
   for (const device of ["microphone", "camera", "screen"] as const) {
     const issue = access.snapshot.issues[device];
     if (!issue || media.local[device].state === "enabled") continue;
-    deviceAccess[device] = { ...issue, onOpenChange: (open) => access.store.setOpen(device, open), onRetry: () => void access.store.retry(device) };
+    const first = device === "microphone" ? media.devices.microphones[0] : device === "camera" ? media.devices.cameras[0] : undefined;
+    const useDefault =
+      device === "screen" || !first
+        ? undefined
+        : () =>
+            void run(
+              async () => {
+                await (device === "microphone" ? client.media.selectMicrophone(first.deviceId) : client.media.selectCamera(first.deviceId));
+                await (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true));
+              },
+              device,
+              "start",
+            );
+    deviceAccess[device] = { ...issue, onOpenChange: (open) => access.store.setOpen(device, open), onRetry: () => void access.store.retry(device), onUseDefault: useDefault, defaultDeviceLabel: first?.label || undefined };
   }
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,

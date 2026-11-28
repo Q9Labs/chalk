@@ -9,6 +9,7 @@ export class ConnectionLifecycleFailure extends Data.TaggedError("ConnectionLife
   readonly message: string;
   readonly cause?: unknown;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  readonly devices?: readonly ("microphone" | "camera")[];
 }> {}
 
 export function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {

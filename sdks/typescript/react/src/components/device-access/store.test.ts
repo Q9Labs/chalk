@@ -12,6 +12,7 @@ function ports(state: string) {
     permissions: { query: async () => status },
     mediaDevices: undefined,
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    touchPoints: 0,
   };
   return { devicePorts, status };
 }
@@ -42,6 +43,19 @@ describe("a refused microphone", () => {
     status.state = "granted";
     status.dispatchEvent(new Event("change"));
     await vi.waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+  });
+
+  it("says it is still blocked only after a retry that failed", async () => {
+    const { devicePorts } = ports("denied");
+    const retry = vi.fn(async () => undefined);
+    const store = await reported(devicePorts, retry);
+    expect(store.getSnapshot().issues.microphone?.stillBlocked).toBe(false);
+    await store.retry("microphone");
+    await store.report("microphone", denied, retry);
+    expect(store.getSnapshot().issues.microphone?.stillBlocked).toBe(true);
+    store.clear("microphone");
+    await store.report("microphone", denied, retry);
+    expect(store.getSnapshot().issues.microphone?.stillBlocked).toBe(false);
   });
 
   it("is retried on the person's request, one run at a time", async () => {

@@ -29,6 +29,7 @@ it("asks the browser once for a refused microphone however often the call recove
   try {
     await client.join({ microphone: true, camera: false });
     expect(browserCalls).toBe(1);
+    expect(client.getSnapshot().connection.lastError).toMatchObject({ code: "media.permission_denied", devices: ["microphone"] });
     for (let cycle = 0; cycle < 3; cycle++) {
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
       await new Promise((resolve) => setTimeout(resolve, 20));

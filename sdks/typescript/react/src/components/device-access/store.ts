@@ -7,6 +7,8 @@ export interface DeviceIssue {
   readonly reason: DeviceAccessReason;
   readonly label: string;
   readonly open: boolean;
+  /** A retry has run since the problem appeared and the device is still refused. */
+  readonly stillBlocked: boolean;
 }
 
 export interface DeviceAccessSnapshot {
@@ -21,6 +23,7 @@ interface Pending {
   retry?: () => Promise<unknown>;
   stop?: () => void;
   running?: boolean;
+  retried?: boolean;
 }
 
 /**
@@ -70,7 +73,7 @@ export class DeviceAccessStore {
     pending.stop?.();
     pending.retry = retry;
     pending.stop = watch(() => void this.retry(device));
-    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, label, open: true } }, unavailable: false });
+    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, label, open: true, stillBlocked: pending.retried === true } }, unavailable: false });
   }
 
   /** The command worked, or something else turned the device on. */
@@ -79,6 +82,7 @@ export class DeviceAccessStore {
     pending.attempt++;
     pending.stop?.();
     pending.stop = pending.retry = undefined;
+    pending.retried = false;
     if (!this.#snapshot.issues[device]) return;
     const { [device]: _cleared, ...issues } = this.#snapshot.issues;
     this.#set({ issues });
@@ -94,6 +98,7 @@ export class DeviceAccessStore {
     const pending = this.#pending.get(device);
     if (!pending?.retry || pending.running) return;
     pending.running = true;
+    pending.retried = true;
     try {
       await pending.retry();
     } finally {

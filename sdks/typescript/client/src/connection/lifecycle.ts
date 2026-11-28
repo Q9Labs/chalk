@@ -19,7 +19,7 @@ import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
-import { recordDeviceFailure } from "../media/capture-error";
+import { permissionBlockOf, recordDeviceFailure } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -1366,7 +1366,17 @@ function joinCancelledFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaRefusalField(value.cause), ...mediaIceFailureField(value.cause) });
+  return Object.freeze({
+    code: value.code,
+    action: null,
+    recoverable: value.recoverable,
+    message: value.message,
+    ...(value.sync ? { sync: value.sync } : {}),
+    ...(value.devices ? { devices: value.devices } : {}),
+    ...(permissionBlockOf(value.cause) ? { permissionBlock: "system" as const } : {}),
+    ...mediaRefusalField(value.cause),
+    ...mediaIceFailureField(value.cause),
+  });
 }
 function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
   return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));

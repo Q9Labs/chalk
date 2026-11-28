@@ -73,6 +73,10 @@ export type ConnectionFailure = {
   readonly mediaHttpStatus?: number;
   /** Media startup timed out or failed while ICE was connecting. */
   readonly mediaIceFailure?: true;
+  /** The devices a join could not open, when the join went ahead without them. */
+  readonly devices?: readonly ("microphone" | "camera")[];
+  /** The browser says the operating system refused capture. */
+  readonly permissionBlock?: "system";
 };
 
 export class ConnectionError extends Error {

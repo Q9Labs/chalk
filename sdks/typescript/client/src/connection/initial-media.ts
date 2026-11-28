@@ -96,5 +96,6 @@ function initialCaptureWarning(
   if (!first) return null;
   const names = failures.length === 2 ? "Microphone and camera" : first.source === "microphone" ? "Microphone" : "Camera";
   const message = failures.length === 2 && first.failure.code !== failures[1]?.failure.code ? failures.map(({ source, failure }) => `${source === "microphone" ? "Microphone" : "Camera"}: ${failure.message}`).join(" ") : `${names}: ${first.failure.message}`;
-  return lifecycleFailure(first.failure.code, true, message, first.failure.cause);
+  const devices = failures.filter(({ failure }) => failure.code === first.failure.code).map(({ source }) => source);
+  return new ConnectionLifecycleFailure({ code: first.failure.code, recoverable: true, message, cause: first.failure.cause, devices });
 }

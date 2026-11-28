@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A microphone or camera the browser refused is no longer asked for again until the person acts or the browser's permission changes. Before, a join retry or a failed command that ran again asked the browser each time, and every refusal reported a `device_failed` event. Joining, turning a device on and the camera preview count as the person acting.
+- `connection.lastError` names the devices a join went ahead without (`devices`) and carries `permissionBlock` when the browser says the operating system refused capture, so an app can show recovery steps for a refusal at join time.
 - The server client supports Transcript listing, retrieval, and deletion, including structured documents, plain text, signed download URLs, and on-demand transcription requests.
 - Manage webhook endpoints and their revisions and secrets, list deliveries, and request redelivery with the server client.
 - Put, get, and cancel Scheduled Episodes with the server client. Participant admission now forwards `admission`, and Space updates forward `metadata` alongside artifact policies.
