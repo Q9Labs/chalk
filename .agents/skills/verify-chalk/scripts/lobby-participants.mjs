@@ -17,6 +17,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
   let call;
   let episodeId;
   let apiKey;
+  const fontProof = [];
 
   const admit = async (name, kind) => {
     const response = await fetch(new URL("/v1/tenants/" + call.tenantId + "/spaces/" + call.spaceId + "/episodes/" + episodeId + "/participants", web), {
@@ -32,6 +33,16 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     await who.page.reload();
     await lobbyLine(who).waitFor({ timeout: 30_000 });
     await who.page.waitForTimeout(1200);
+  };
+  // Proof screenshots must show Chalk's own typeface, so a page that fell back to a system font fails the journey.
+  const assertFigtree = async (who) => {
+    const fonts = await who.page.evaluate(async () => {
+      await document.fonts.ready;
+      const line = document.querySelector("[data-testid='lobby.names']");
+      return { family: line ? getComputedStyle(line).fontFamily : "", loaded: [...document.fonts].filter((face) => face.family.replace(/"/g, "") === "Figtree" && face.status === "loaded").length };
+    });
+    if (!/Figtree/.test(fonts.family) || fonts.loaded === 0) throw new Error(who.name + " renders " + fonts.family + " with " + fonts.loaded + " Figtree files loaded");
+    return who.name + ": " + fonts.family + ", " + fonts.loaded + " Figtree file(s) loaded";
   };
   const lobbyLine = (who) => who.page.getByTestId("lobby.names");
   const aiBadges = (who) => lobbyLine(who).locator("[aria-label='AI participant']");
@@ -64,6 +75,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     if ((await aiBadges(guest).count()) !== 2) throw new Error("expected two AI badges in the lobby line");
     if ((await guest.page.getByText("Only you see this").count()) > 0) throw new Error("the Only you see this pill is still there");
     if ((await guest.page.getByText(/transcribe/i).count()) > 0) throw new Error("a transcription notice is showing");
+    fontProof.push(await assertFigtree(guest));
     await setTheme(guest, "dark");
     await shot(guest, "lobby-dark");
     await setTheme(guest, "light");
@@ -73,6 +85,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
   await step("a phone visitor sees the same line", async () => {
     await phone.page.goto(call.link);
     await lobbyLine(phone).waitFor({ timeout: 30_000 });
+    fontProof.push(await assertFigtree(phone));
     await setTheme(phone, "dark");
     await shot(phone, "lobby-phone-dark");
     await setTheme(phone, "light");
@@ -99,6 +112,8 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
       }
     }
   });
+
+  await step("every capture used Chalk's own typeface", async () => fontProof.join("; "));
 
   await step("the visitor joins the call", async () => {
     await guest.page.getByLabel("Your name", { exact: true }).fill(guest.name);
