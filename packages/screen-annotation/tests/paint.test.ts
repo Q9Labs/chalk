@@ -3,7 +3,7 @@ import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import type { ScreenAnnotationMark, ScreenAnnotationPoint, ScreenAnnotationPresence, ScreenAnnotationShape } from "@q9labsai/chalk-client";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ANNOTATION_FONT_FAMILY, FRAME_UNITS, canvasAnnotationTextMeasure, contentRect, createAnnotationPresenceTracker, framePoint, hitTestAnnotation, paintAnnotation, projectFramePoint } from "../src/index";
+import { ANNOTATION_FONT_FAMILY, FRAME_UNITS, canvasAnnotationTextMeasure, firstName, contentRect, createAnnotationPresenceTracker, framePoint, hitTestAnnotation, paintAnnotation, projectFramePoint } from "../src/index";
 
 const rect = { x: 0, y: 0, width: 400, height: 260 };
 const author = { participant_id: "viewer", display_name: "Alex", color: "#22cc55" };
@@ -187,6 +187,27 @@ describe("annotation Canvas renderer", () => {
     const measured = canvasAnnotationTextMeasure(ctx)("A < B", 42);
     expect(measured).toBeGreaterThan(70);
     expect(measured).toBeLessThan(130);
+  });
+
+  it("names other people's marks with a first name in their ink, and never the viewer's own", () => {
+    const stroke = { kind: "pen", points: [point(0.1, 0.2), point(0.4, 0.2)] } as const;
+    const theirs = { ...mark(stroke, { color: "#c15a10", participantId: "omar" }), author: { participant_id: "omar", display_name: "Omar Haddad", color: "#c15a10" } };
+    const ctx = createCanvas(400, 260).getContext("2d");
+    paintAnnotation(ctx, { rect, marks: [theirs], nowMs: 1000 });
+    const tagArea = () => ctx.getImageData(166, 60, 30, 14).data;
+    expect(tagArea().some((value, index) => index % 4 === 3 && value > 0)).toBe(false);
+
+    paintAnnotation(ctx, { rect, marks: [theirs], nameMarksExcept: "omar", nowMs: 1000 });
+    expect(tagArea().some((value, index) => index % 4 === 3 && value > 0)).toBe(false);
+
+    paintAnnotation(ctx, { rect, marks: [theirs], nameMarksExcept: "nora", nowMs: 1000 });
+    const pixels = tagArea();
+    const ink = [...Array(pixels.length / 4).keys()].filter((index) => pixels[index * 4] === 0xc1 && pixels[index * 4 + 1] === 0x5a && pixels[index * 4 + 2] === 0x10);
+    const text = [...Array(pixels.length / 4).keys()].filter((index) => Math.max(pixels[index * 4] ?? 0, pixels[index * 4 + 1] ?? 0, pixels[index * 4 + 2] ?? 0) < 90 && pixels[index * 4 + 3] === 255);
+    expect(ink.length).toBeGreaterThan(40);
+    expect(text.length).toBeGreaterThan(0);
+    expect(firstName("  Omar  Haddad ")).toBe("Omar");
+    expect(firstName("Cher")).toBe("Cher");
   });
 
   it("paints a named pointer trail briefly and never joins across a fence or reconnect", () => {

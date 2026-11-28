@@ -5,6 +5,7 @@ export type { AnnotationMarkGeometry, AnnotationTextMeasure } from "./mark-geome
 export { createAnnotationPresenceTracker, LASER_TRAIL_MS } from "./presence";
 export type { AnnotationLaserSample, AnnotationPresence } from "./presence";
 export { annotationFont, canvasAnnotationTextMeasure, type AnnotationCanvasContext } from "./canvas";
+export { firstName } from "./label";
 export { paintAnnotation, type PaintAnnotationOptions } from "./paint";
 export { hitTestAnnotation } from "./hit-test";
 export type { HitTestAnnotationOptions } from "./hit-test";
@@ -15,3 +16,4 @@ export type { AnnotationPngSurface } from "./png";
 
 export { INK_PROOF_TIMEOUT_MS, frameContainsStroke, frameProvesStroke, inkHandoff, makeBakedStrokeProof, makeStrokeProof, type BakedStrokeProof, type InkRaster, type StrokeProof } from "./baked-stroke-proof";
 export { BakedExportProof } from "./baked-export";
+export { ANNOTATION_SWATCHES } from "./swatches";

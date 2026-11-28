@@ -41,7 +41,7 @@ function inkCenterY() {
 
 async function openAnnotationFixture(browser: Browser, screen: Screen) {
   await browser.goto("/call-states.html?state=screen-annotation");
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
+  await screen.getByRole("button", "Draw", { exact: true }).click();
   return annotationBounds(browser);
 }
 
@@ -73,17 +73,24 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 1500 }).toBe(true);
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 3500 }).toBe(false);
 
-  await screen.getByRole("button", "Keep new marks", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade").click();
+  await browser.keyboard.press("Escape");
   const fitY = 0.34;
   await stroke(browser, fitY);
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
-  await screen.getByRole("button", "Undo mark", { exact: true }).click();
+  await screen.getByRole("button", "Undo", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
-  await screen.getByRole("button", "Redo mark", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitem", "Redo", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
-  await screen.getByRole("button", "Save frame to board", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitem", /^Save to board/).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "1 accepted marks sent to board" })).toBeVisible();
-  const png = await browser.waitForDownload(() => screen.getByRole("button", "Download annotated PNG", { exact: true }).click());
+  const png = await browser.waitForDownload(async () => {
+    await screen.getByRole("button", "More", { exact: true }).click();
+    await screen.getByRole("menuitem", /^Download image/).click();
+  });
   expect(png.suggestedFilename).toBe("chalk-annotated-screen.png");
   await expect.poll(async () => Math.abs((await browser.evaluate(inkCenterY)) - fitY)).toBeLessThan(0.012);
   await app.screenshot("viewer-kept-fit");
@@ -91,11 +98,12 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
   const fillY = 0.5 + ((fitY - 0.5) * fillHeight) / fitHeight;
   await expect.poll(async () => Math.abs((await browser.evaluate(inkCenterY)) - fillY)).toBeLessThan(0.012);
   await app.screenshot("viewer-kept-fill");
-  await screen.getByRole("button", "Clear my marks", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitem", "Clear my marks", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
 });
 
-test("revoke during a gesture, raise a hand to draw, approve and fall back when loopback is denied", async ({ app, browser, screen }) => {
+test("revoke during a gesture, ask first, allow, then the sharer shows marks through Chalk Helper", async ({ app, browser, screen }) => {
   const box = await openAnnotationFixture(browser, screen);
   await browser.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
   await browser.mouse.down();
@@ -106,22 +114,27 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
     return Boolean(button);
   });
   await browser.mouse.up();
-  await expect(screen.getByRole("button", "Annotate", { exact: true })).not.toBeVisible();
+  await expect(screen.getByRole("button", "Draw", { exact: true })).not.toBeVisible();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
-  await screen.getByRole("button", "Raise hand to draw", { exact: true }).click();
-  await expect(screen.getByRole("button", "Request sent", { exact: true })).toBeDisabled();
+  await screen.getByRole("button", "Ask to draw", { exact: true }).click();
+  await expect(browser.locator('[role="status"]').filter({ hasText: "Asked Sara" })).toBeVisible();
   await app.screenshot("viewer-request");
 
   await screen.getByRole("button", "View as Sara", { exact: true }).click();
-  await screen.getByRole("button", "Who can draw · 1 requested", { exact: true }).click();
   await screen.getByRole("button", "Allow Omar to draw", { exact: true }).click();
-  await browser.keyboard.press("Escape");
   await screen.getByRole("button", "View as Omar", { exact: true }).click();
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
-  await screen.getByRole("button", "Keep new marks", { exact: true }).click();
+  await screen.getByRole("button", "Draw", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade").click();
+  await browser.keyboard.press("Escape");
   await stroke(browser);
   await screen.getByRole("button", "View as Sara", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
+});
+
+test("the sharer connects Chalk Helper to show marks on their own screen", async ({ app, browser, screen }) => {
+  await browser.goto("/call-states.html?state=share-sharer-helper");
+  await screen.getByRole("button", "Show on my screen", { exact: true }).click();
   await screen.getByRole("button", "Connect Chalk Helper", { exact: true }).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "Couldn’t reach Chalk Helper on this device." })).toBeVisible();
   await browser.locator("input[autocomplete=off]").fill("HJKX-4821");
@@ -130,9 +143,6 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
   await screen.getByRole("button", "Allow this device", { exact: true }).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "Marks show on your screen" })).toBeVisible();
   await app.screenshot("sharer-helper-approval");
-  await screen.getByRole("button", "End share", { exact: true }).click();
-  await expect(browser.locator(canvas)).not.toBeVisible();
-  await expect(browser.locator('[data-part="annotation-helper-offer"]')).not.toBeVisible();
 });
 
 async function joinGuest(host: Page, page: Page, invite: string, name: string) {
@@ -153,7 +163,7 @@ async function chooseShare(page: Page, source: "Window" | "Entire screen", insta
 }
 
 async function drawLiveMark(page: Page) {
-  await page.getByRole("button", { name: "Annotate", exact: true }).click();
+  await page.getByRole("button", { name: "Draw", exact: true }).click();
   const box = await page.locator(canvas).boundingBox();
   if (!box) throw new Error("No annotation canvas on the received screen share");
   const y = box.y + box.height * 0.42;
@@ -213,19 +223,17 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-prompt.png") });
     await helperCard(host).getByRole("button", { name: "Not now", exact: true }).click();
     await helperCard(host).waitFor({ state: "hidden" });
-    await mobile.getByRole("button", { name: "Annotate", exact: true }).waitFor();
+    await mobile.getByRole("button", { name: "Draw", exact: true }).waitFor();
     expect(await helperCard(mobile).count()).toBe(0);
     await drawLiveMark(guest);
-    await helperCard(host)
-      .getByText(/Desktop Guest is drawing on your share/)
-      .waitFor();
+    await host.locator('[data-part="sharer-title"]').getByText("Desktop is drawing", { exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-drawing.png") });
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 
     await host.evaluate(() => localStorage.setItem("fixture-opaque-window", "1"));
     await chooseShare(host, "Window", installer);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).click();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).click();
     await helperCard(host)
       .getByText(/Share your entire screen to use it/)
       .waitFor();
@@ -253,16 +261,16 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await helperCard(guest).waitFor({ state: "detached" });
 
     await chooseShare(host, "Entire screen", installer);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).waitFor();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).waitFor();
     expect(await helperCard(host).count()).toBe(0);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).click();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).click();
     await helperCard(host).getByText(intro, { exact: true }).waitFor();
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 
     await chooseShare(mobile, "Window");
     await mobile.locator('[data-part="screen-annotation-controls"][data-local]').waitFor();
-    await host.getByRole("button", { name: "Annotate", exact: true }).waitFor();
+    await host.getByRole("button", { name: "Draw", exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "web-viewer-annotate.png") });
     await drawLiveMark(host);
     expect(await helperCard(mobile).count()).toBe(0);

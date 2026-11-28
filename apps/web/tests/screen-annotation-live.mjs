@@ -1,4 +1,5 @@
 import { runJourney } from "../../../.agents/skills/verify-chalk/scripts/journey.mjs";
+import { keepMarks } from "./screen-annotation-support.mjs";
 
 const canvasSelector = '[data-part="screen-annotation-layer"]';
 const wait = { timeout: 35_000 };
@@ -31,8 +32,8 @@ await runJourney("screen-annotation-live", async ({ step, person, startCall, joi
     );
 
   await step("A viewer's kept mark appears in a second browser", async () => {
-    await drawer.page.getByRole("button", { name: "Annotate", exact: true }).click(wait);
-    await drawer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
+    await keepMarks(drawer.page);
     const canvas = drawer.page.locator(canvasSelector).first();
     const bounds = await canvas.boundingBox(wait);
     if (!bounds) throw new Error("The drawer has no annotation plane.");
@@ -44,9 +45,10 @@ await runJourney("screen-annotation-live", async ({ step, person, startCall, joi
     // Undo must clear the second browser as well, distinguishing a durable mark from pointer presence.
     await waitForInk(observer.page, true);
     await shot(observer, "remote-kept-mark");
-    await drawer.page.getByRole("button", { name: "Undo mark", exact: true }).click();
+    await drawer.page.getByRole("button", { name: "Undo", exact: true }).click();
     await waitForInk(observer.page, false);
-    await drawer.page.getByRole("button", { name: "Redo mark", exact: true }).click();
+    await drawer.page.getByRole("button", { name: "More", exact: true }).click();
+    await drawer.page.getByRole("menuitem", { name: "Redo", exact: true }).click();
     await waitForInk(observer.page, true);
   });
 
