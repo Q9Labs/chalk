@@ -6,7 +6,7 @@ import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 import { timings } from "../motion/motion";
 import { AIBadge } from "../primitives/AIBadge";
 import { useTheme } from "../theme/theme";
-import { easings, identityColors } from "../theme/tokens";
+import { corners, easings, identityColors, space } from "../theme/tokens";
 
 export type FaceAvatarProps = {
   readonly name: string;
@@ -152,7 +152,7 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
 
 const styles = StyleSheet.create({
   circle: { overflow: "hidden" },
-  aiBadge: { position: "absolute", right: 0, bottom: 0, padding: 1, borderRadius: 999 },
+  aiBadge: { position: "absolute", right: 0, bottom: 0, padding: space["0-5"], borderRadius: corners.pill },
   // The initial sits on y = 70 with a 26-unit font, so its baseline is near y = 79.
   mouthOrigin: { transformOrigin: "50% 79%" },
 });

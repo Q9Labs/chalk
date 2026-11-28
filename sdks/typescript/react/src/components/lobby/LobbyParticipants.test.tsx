@@ -39,7 +39,7 @@ it('uses "is" for one person and renders nothing for an empty roster', () => {
   act(() => empty.unmount());
 });
 
-it("names every AI participant, counts the other people, and lists everyone behind the others button", () => {
+it("names every AI participant, counts the other people, and lists everyone behind the others button", async () => {
   const root = render([
     { displayName: "Nora", identityKind: "user" },
     { displayName: "Tomás", identityKind: "user" },
@@ -48,8 +48,9 @@ it("names every AI participant, counts the other people, and lists everyone behi
     { displayName: "Wen", identityKind: "guest" },
   ]);
   expect(text()).toBe("Nora, Scribe and 3 others are in this call");
+  await vi.waitFor(() => expect(document.querySelector("[data-testid='lobby.others']")).not.toBeNull());
   const others = document.querySelector<HTMLButtonElement>("[data-testid='lobby.others']");
-  act(() => others?.click());
+  await act(async () => others?.click());
   expect(document.body.textContent).toContain("5 in this call");
   expect(document.body.textContent).toContain("Wen");
   act(() => root.unmount());

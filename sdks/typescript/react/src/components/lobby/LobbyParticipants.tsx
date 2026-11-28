@@ -1,8 +1,9 @@
 import { lobbyRoster, type LobbyParticipant } from "@q9labsai/chalk-client";
-import React, { Fragment, useState } from "react";
+import React, { Fragment, lazy, Suspense } from "react";
 import { AIBadge } from "../atomic/AIBadge";
-import { Avatar } from "../atomic/Avatar";
-import { ChalkPopover } from "../chalk-ui";
+import { LobbyAvatar } from "./LobbyAvatar";
+
+const LobbyOthers = lazy(() => import("./LobbyOthers"));
 
 export type { LobbyParticipant };
 
@@ -10,13 +11,8 @@ export type LobbyParticipantsProps = {
   readonly participants?: readonly LobbyParticipant[];
 };
 
-function ParticipantAvatar({ participant }: { readonly participant: LobbyParticipant }): React.JSX.Element {
-  return <Avatar name={participant.displayName} size="xs" generated animated={false} style={{ width: 28, height: 28 }} className="ring-2 ring-[var(--chalk-app-canvas)]" />;
-}
-
 /** Who is already in the call, in one line: up to three names, AI participants always named and marked, and the rest behind an "others" list. */
 export function LobbyParticipants({ participants = [] }: LobbyParticipantsProps): React.JSX.Element | null {
-  const [open, setOpen] = useState(false);
   if (participants.length === 0) return null;
   const { shown, rest } = lobbyRoster(participants);
   const parts = shown.map((participant, index) => (
@@ -27,34 +23,16 @@ export function LobbyParticipants({ participants = [] }: LobbyParticipantsProps)
   ));
   if (rest.length > 0)
     parts.push(
-      <ChalkPopover
-        key="others"
-        open={open}
-        onOpenChange={setOpen}
-        label="Everyone in this call"
-        className="w-[280px] !p-1.5"
-        trigger={
-          <button type="button" data-testid="lobby.others" className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline decoration-[var(--chalk-line-strong)] underline-offset-[3px]">
-            {rest.length} others
-          </button>
-        }
-      >
-        <p className="m-0 px-2.5 pb-1.5 pt-2 text-(length:--type-caption) font-medium text-[var(--chalk-muted-text)]">{participants.length} in this call</p>
-        {participants.map((participant, index) => (
-          <div key={`${participant.displayName}-${index}`} className="flex min-h-10 items-center gap-2.5 px-2.5 text-(length:--type-body-sm)">
-            <ParticipantAvatar participant={participant} />
-            <span className="min-w-0 truncate">{participant.displayName}</span>
-            {participant.identityKind === "agent" ? <AIBadge /> : null}
-          </div>
-        ))}
-      </ChalkPopover>,
+      <Suspense key="others" fallback={<span className="underline decoration-[var(--chalk-line-strong)] underline-offset-[3px]">{rest.length} others</span>}>
+        <LobbyOthers participants={participants} count={rest.length} />
+      </Suspense>,
     );
   return (
     <div data-testid="lobby.participants" className="m-0 flex w-full items-center gap-2.5 text-left text-(length:--type-body) leading-snug text-[var(--chalk-soft-text)]">
       <span className="flex shrink-0 items-center pl-1.5" aria-hidden="true">
         {shown.slice(0, 3).map((participant, index) => (
           <span key={`${participant.displayName}-${index}`} className="-ml-1.5 inline-flex">
-            <ParticipantAvatar participant={participant} />
+            <LobbyAvatar participant={participant} />
           </span>
         ))}
       </span>

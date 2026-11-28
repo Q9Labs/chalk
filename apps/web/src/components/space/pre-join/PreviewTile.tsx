@@ -53,9 +53,7 @@ export function PreviewTile({
   return (
     <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] lg:w-[600px]">
       <video ref={video} autoPlay muted playsInline aria-hidden={!cameraTrack} className={cn("absolute inset-0 size-full object-cover", !cameraTrack && "hidden", dimmed && "opacity-35")} style={{ transform: devices.mirrored ? "scaleX(-1)" : undefined }} />
-      {cameraTrack ? null : (
-        <Avatar name={name} size="2xl" className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2", dimmed && "opacity-35")} style={{ width: 112, height: 112 }} />
-      )}
+      {cameraTrack ? null : <Avatar name={name} size="2xl" className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2", dimmed && "opacity-35")} style={{ width: 112, height: 112 }} />}
       <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[var(--chalk-popover)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>
