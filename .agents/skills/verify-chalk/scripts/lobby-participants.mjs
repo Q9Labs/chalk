@@ -23,7 +23,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
       headers: { Authorization: "Bearer " + seed.systemToken, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
       body: JSON.stringify({ name, role: "collaborator", identity_kind: kind, admission: "direct" }),
     });
-    if (!response.ok) throw new Error("admitting " + name + " answered HTTP " + response.status);
+    if (!response.ok) throw new Error("admitting " + name + " answered HTTP " + response.status + " " + ((await response.json().catch(() => null))?.error?.code ?? ""));
   };
   const lobbyLine = (who) => who.page.getByTestId("lobby.names");
   const aiBadges = (who) => lobbyLine(who).locator("[aria-label='AI participant']");
