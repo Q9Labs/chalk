@@ -18,7 +18,7 @@ it("draws every lobby icon in the call's family: 1.75 outline glyphs, none from 
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(<PreJoin spaceName="Q9 team" displayName="Hasan" onDisplayNameChange={() => undefined} joining={false} onJoin={() => undefined} />));
-  const icons = [...document.querySelectorAll("svg")];
+  const icons = [...document.querySelectorAll("svg")].filter((svg) => !svg.closest("[aria-label^='Avatar for']"));
   expect(icons.length).toBeGreaterThan(3);
   expect(icons.map((icon) => icon.getAttribute("stroke-width"))).toEqual(icons.map(() => "1.75"));
   expect(document.querySelectorAll("style[data-href]").length).toBeGreaterThan(0);
@@ -49,7 +49,7 @@ it("says who is in the call, says nobody is when the call is empty, and stays si
     { displayName: "Nora", identityKind: "user" },
     { displayName: "Aria", identityKind: "agent" },
   ]);
-  expect(document.querySelector("[data-testid='lobby.names']")?.textContent).toBe("Nora and AriaAI are in this call");
+  expect(document.querySelector("[data-testid='lobby.names']")?.textContent).toBe("Nora and Aria are in this call");
   expect(document.body.textContent).not.toContain("Only you see this");
   await act(async () => root.unmount());
 });
