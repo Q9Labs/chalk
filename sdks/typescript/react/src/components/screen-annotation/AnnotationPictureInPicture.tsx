@@ -15,7 +15,7 @@ function hasDocumentPiP(window: Window): window is Window & { documentPictureInP
   return "documentPictureInPicture" in window && typeof window.documentPictureInPicture === "object" && window.documentPictureInPicture !== null && "requestWindow" in window.documentPictureInPicture && typeof window.documentPictureInPicture.requestWindow === "function";
 }
 
-type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "fontUrl"> & { readonly track: MediaStreamTrack };
+type PictureProps = Pick<ScreenAnnotationLayerProps, "client" | "state" | "presence" | "fontUrl" | "viewerId"> & { readonly track: MediaStreamTrack };
 
 // The window has no app CSS, so it borrows the call's own token values.
 const hostTokens = ["--chalk-stage", "--chalk-overlay-strong", "--chalk-overlay-warning", "--chalk-on-overlay", "--chalk-positive", "--chalk-shadow", "--type-caption", "--space-0-5", "--space-1-5", "--space-2-5", "--space-3", "--corner-pill"] as const;

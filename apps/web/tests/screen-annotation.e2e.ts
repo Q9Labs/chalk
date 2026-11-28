@@ -73,13 +73,16 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 1500 }).toBe(true);
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 3500 }).toBe(false);
 
-  await screen.getByRole("button", "Keep new marks", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade after a few seconds").click();
+  await browser.keyboard.press("Escape");
   const fitY = 0.34;
   await stroke(browser, fitY);
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
-  await screen.getByRole("button", "Undo mark", { exact: true }).click();
+  await screen.getByRole("button", "Undo", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
-  await screen.getByRole("button", "Redo mark", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitem", "Redo", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);
   await screen.getByRole("button", "Save frame to board", { exact: true }).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "1 accepted marks sent to board" })).toBeVisible();
@@ -118,7 +121,9 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
   await browser.keyboard.press("Escape");
   await screen.getByRole("button", "View as Omar", { exact: true }).click();
   await screen.getByRole("button", "Annotate", { exact: true }).click();
-  await screen.getByRole("button", "Keep new marks", { exact: true }).click();
+  await screen.getByRole("button", "More", { exact: true }).click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade after a few seconds").click();
+  await browser.keyboard.press("Escape");
   await stroke(browser);
   await screen.getByRole("button", "View as Sara", { exact: true }).click();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(true);

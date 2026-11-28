@@ -39,8 +39,10 @@ function recent(log, type, predicate = () => true) {
 async function tapInk(page, y) {
   const open = page.getByRole("button", { name: "Annotate", exact: true });
   if (await open.isVisible()) await open.click();
-  const keep = page.getByRole("button", { name: "Keep new marks", exact: true });
-  if ((await keep.getAttribute("aria-pressed")) !== "true") await keep.click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  const fade = page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+  if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
+  await page.keyboard.press("Escape");
   const box = await page.locator(canvas).first().boundingBox(wait);
   assert.ok(box);
   await page.mouse.move(box.x + box.width * 0.38, box.y + box.height * y);
@@ -92,7 +94,7 @@ await runJourney("screen-annotation-recovery", async ({ step, person, startCall,
   const kept = async (y) => {
     const before = sent.length;
     await tapInk(viewer.page, y);
-    await viewer.page.getByRole("button", { name: "Undo mark", exact: true }).waitFor(wait);
+    await viewer.page.getByRole("button", { name: "Undo", exact: true }).waitFor(wait);
     const command = recent(sent.slice(before), "annotation_command", (message) => message.command.kind === "commit");
     const accepted = await until(() => recent(sent.slice(before), "annotation_receipt", (message) => message.operation_id === command?.operation_id), "No receipt for the new mark");
     assert.equal(accepted?.result.kind, "accepted");

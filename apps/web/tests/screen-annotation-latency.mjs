@@ -110,7 +110,10 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     await drawer.page.getByRole("button", { name: "Ink colour and width" }).click();
     await drawer.page.getByLabel("Ink colour", { exact: true }).fill("#ff00ff");
     await drawer.page.keyboard.press("Escape");
-    await drawer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await drawer.page.getByRole("button", { name: "More", exact: true }).click();
+    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
+    await drawer.page.keyboard.press("Escape");
     for (const endpoint of [{ page: drawer.page, selector: canvas }, ...surfaces]) {
       await endpoint.page.waitForFunction(contentBox, endpoint.selector, timeout);
     }

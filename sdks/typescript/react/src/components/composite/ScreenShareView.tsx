@@ -73,6 +73,8 @@ export function ScreenSharePresentation({
 }: ScreenSharePresentationProps): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const [canvasHost, setCanvasHost] = useState<HTMLDivElement | null>(null);
+  const [policyHost, setPolicyHost] = useState<HTMLElement | null>(null);
+  const [noticeHost, setNoticeHost] = useState<HTMLElement | null>(null);
   const [fill, setFill] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [poppedOut, setPoppedOut] = useState(false);
@@ -134,79 +136,100 @@ export function ScreenSharePresentation({
     >
       <div
         ref={root}
-        className="absolute inset-0 bg-[var(--chalk-tile)]"
+        className="absolute inset-0 flex flex-col bg-[var(--chalk-tile)]"
         onPointerUp={(event) => {
           if (primary && event.pointerType !== "mouse" && !(event.target instanceof Element && event.target.closest("button"))) setControlsOpen((open) => !open);
         }}
       >
-        <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[ease-out]", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
-          <div
-            className={cn("relative h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[ease-out] [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
-            style={{ transform: zoom ? "scale(2)" : undefined }}
-          >
-            {media}
-            {annotation && annotationMedia ? <div ref={setCanvasHost} className="pointer-events-none absolute inset-0" /> : null}
+        {ownBigShare ? (
+          <LocalShareControls
+            capture={capture}
+            pending={pending}
+            policyHost={setPolicyHost}
+            noticeHost={setNoticeHost}
+            onChangeShare={onChangeShare ? (options) => void run(() => onChangeShare(options), "screen", "start") : undefined}
+            onStopSharing={onStopSharing ? () => void run(onStopSharing, "screen", "stop") : undefined}
+          />
+        ) : null}
+        <div className="relative min-h-0 flex-1">
+          <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[ease-out]", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
+            <div
+              className={cn("relative h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[ease-out] [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
+              style={{ transform: zoom ? "scale(2)" : undefined }}
+            >
+              {media}
+              {annotation && annotationMedia ? <div ref={setCanvasHost} className="pointer-events-none absolute inset-0" /> : null}
+            </div>
           </div>
+          {annotation && annotationMedia && !hidden ? (
+            <Suspense fallback={null}>
+              <AnnotationSurface
+                {...annotationMedia}
+                annotation={annotation}
+                canvasHost={canvasHost}
+                fit={fill ? "fill" : "fit"}
+                primary={primary}
+                live={status === "live" && mediaVisible && !poppedOut}
+                isLocal={isLocal}
+                capture={capture}
+                sharerName={sharedByName}
+                policyHost={policyHost}
+                noticeHost={noticeHost}
+              />
+            </Suspense>
+          ) : null}
+          {poppedOut ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
+              <StageIcon name="pip" size={32} />
+              <p className="font-medium text-[var(--chalk-text)]">{name} is in a picture-in-picture window</p>
+              <ChalkButton className="!h-8 !px-3" onClick={() => void popout()}>
+                Bring it back
+              </ChalkButton>
+            </div>
+          ) : null}
+          {status === "connecting" ? (
+            <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
+              <span className="h-[18px] w-[18px] rounded-[50%] border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
+              <p className="font-medium text-[var(--chalk-text)]">Connecting to {sharedByName}’s screen…</p>
+            </div>
+          ) : null}
+          {status === "paused" ? (
+            <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-[var(--chalk-on-overlay)]">
+              <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[var(--chalk-overlay-strong)]">
+                <StageIcon name="pause" size={24} />
+              </span>
+              <p className="rounded-(--corner-lg) bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
+            </div>
+          ) : null}
+          {status === "low-quality" ? (
+            <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-(--corner-md) bg-[var(--chalk-overlay-strong)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-on-overlay)]">
+              <SignalBars />
+              <span>{sharedByName}’s connection is slow</span>
+            </div>
+          ) : null}
+          {primary ? switcher : null}
+          {primary && !isLocal && status !== "connecting" ? (
+            <div role="toolbar" aria-label="Share controls" className={cn("absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100", controlsOpen && "opacity-100")}>
+              <ShareControl label={fill ? "Fit the whole screen" : "Fill the tile"} pressed={fill} onClick={() => setFill(!fill)}>
+                <StageIcon name={fill ? "fit" : "fill"} size={16} />
+              </ShareControl>
+              <ShareControl label={zoom ? "Zoom out" : "Zoom in"} pressed={zoom} onClick={() => setZoom(!zoom)}>
+                <StageIcon name={zoom ? "zoom-out" : "zoom-in"} size={16} />
+              </ShareControl>
+              <ShareControl label="Pop out" onClick={() => void popout()}>
+                <StageIcon name="pip" size={16} />
+              </ShareControl>
+              <ShareControl label="Full screen" onClick={() => void fullscreen()}>
+                <StageIcon name="maximize" size={16} />
+              </ShareControl>
+            </div>
+          ) : null}
+          {error ? (
+            <p role="alert" className="absolute right-2 bottom-12 left-2 z-40 rounded-md bg-[var(--chalk-overlay-strong)] p-2 text-sm text-[var(--chalk-on-overlay)]">
+              {error}
+            </p>
+          ) : null}
         </div>
-        {annotation && annotationMedia && !hidden ? (
-          <Suspense fallback={null}>
-            <AnnotationSurface {...annotationMedia} annotation={annotation} canvasHost={canvasHost} fit={fill ? "fill" : "fit"} primary={primary} live={status === "live" && mediaVisible && !poppedOut} isLocal={isLocal} capture={capture} />
-          </Suspense>
-        ) : null}
-        {poppedOut ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
-            <StageIcon name="pip" size={32} />
-            <p className="font-medium text-[var(--chalk-text)]">{name} is in a picture-in-picture window</p>
-            <ChalkButton className="!h-8 !px-3" onClick={() => void popout()}>
-              Bring it back
-            </ChalkButton>
-          </div>
-        ) : null}
-        {status === "connecting" ? (
-          <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
-            <span className="h-[18px] w-[18px] rounded-[50%] border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
-            <p className="font-medium text-[var(--chalk-text)]">Connecting to {sharedByName}’s screen…</p>
-          </div>
-        ) : null}
-        {status === "paused" ? (
-          <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-[var(--chalk-on-overlay)]">
-            <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[var(--chalk-overlay-strong)]">
-              <StageIcon name="pause" size={24} />
-            </span>
-            <p className="rounded-(--corner-lg) bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
-          </div>
-        ) : null}
-        {status === "low-quality" ? (
-          <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-(--corner-md) bg-[var(--chalk-overlay-strong)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-on-overlay)]">
-            <SignalBars />
-            <span>{sharedByName}’s connection is slow</span>
-          </div>
-        ) : null}
-        {primary ? switcher : null}
-        {isLocal && primary ? (
-          <LocalShareControls capture={capture} pending={pending} onChangeShare={onChangeShare ? (options) => void run(() => onChangeShare(options), "screen", "start") : undefined} onStopSharing={onStopSharing ? () => void run(onStopSharing, "screen", "stop") : undefined} />
-        ) : null}
-        {primary && !isLocal && status !== "connecting" ? (
-          <div role="toolbar" aria-label="Share controls" className={cn("absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100", controlsOpen && "opacity-100")}>
-            <ShareControl label={fill ? "Fit the whole screen" : "Fill the tile"} pressed={fill} onClick={() => setFill(!fill)}>
-              <StageIcon name={fill ? "fit" : "fill"} size={16} />
-            </ShareControl>
-            <ShareControl label={zoom ? "Zoom out" : "Zoom in"} pressed={zoom} onClick={() => setZoom(!zoom)}>
-              <StageIcon name={zoom ? "zoom-out" : "zoom-in"} size={16} />
-            </ShareControl>
-            <ShareControl label="Pop out" onClick={() => void popout()}>
-              <StageIcon name="pip" size={16} />
-            </ShareControl>
-            <ShareControl label="Full screen" onClick={() => void fullscreen()}>
-              <StageIcon name="maximize" size={16} />
-            </ShareControl>
-          </div>
-        ) : null}
-        {error ? (
-          <p role="alert" className="absolute right-2 bottom-12 left-2 z-40 rounded-md bg-[var(--chalk-overlay-strong)] p-2 text-sm text-[var(--chalk-on-overlay)]">
-            {error}
-          </p>
-        ) : null}
       </div>
     </TileShell>
   );

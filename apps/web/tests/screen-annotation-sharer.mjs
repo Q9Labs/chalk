@@ -54,7 +54,10 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
   await step("A remote gesture sets the sharer tab cue and puts its kept mark in PiP", async () => {
     const title = await sharer.page.title();
     await viewer.page.getByRole("button", { name: "Annotate", exact: true }).click(wait);
-    await viewer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await viewer.page.getByRole("button", { name: "More", exact: true }).click();
+    const fade = viewer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
+    await viewer.page.keyboard.press("Escape");
     const bounds = await viewer.page.locator(canvas).first().boundingBox(wait);
     assert.ok(bounds, "viewer has an annotation canvas");
     const { x, y, width, height } = bounds;

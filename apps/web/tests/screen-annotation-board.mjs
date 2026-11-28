@@ -17,7 +17,10 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
     await Promise.all([joinByLink(drawer, call.link), joinByLink(observer, call.link)]);
     await control(sharer, "Share screen");
     await drawer.page.getByRole("button", { name: "Annotate", exact: true }).click(wait);
-    await drawer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await drawer.page.getByRole("button", { name: "More", exact: true }).click();
+    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
+    await drawer.page.keyboard.press("Escape");
     const bounds = await drawer.page.locator(canvasSelector).first().boundingBox(wait);
     assert.ok(bounds, "viewer has an annotation canvas");
     const { x, y, width, height } = bounds;
@@ -26,7 +29,7 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
     await drawer.page.mouse.move(x + width * 0.65, y + height * 0.53, { steps: 12 });
     await drawer.page.mouse.up();
     await drawer.page.mouse.move(8, 8);
-    await drawer.page.getByRole("button", { name: "Undo mark", exact: true }).waitFor(wait);
+    await drawer.page.getByRole("button", { name: "Undo", exact: true }).waitFor(wait);
   });
 
   await step("Retry after a lost finalize response reuses the exact board file ID", async () => {
