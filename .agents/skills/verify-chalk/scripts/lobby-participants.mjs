@@ -31,7 +31,7 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     await who.context.addCookies([{ name: "chalk_theme", value: theme, url: web }]);
     await who.page.reload();
     await lobbyLine(who).waitFor({ timeout: 30_000 });
-    await who.page.waitForTimeout(600);
+    await who.page.waitForTimeout(1200);
   };
   const lobbyLine = (who) => who.page.getByTestId("lobby.names");
   const aiBadges = (who) => lobbyLine(who).locator("[aria-label='AI participant']");
@@ -88,10 +88,11 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
         await setTheme(who, theme);
         const text = (await lobbyLine(who).textContent()) ?? "";
         if (!/3 others/.test(text)) throw new Error("the lobby line is " + JSON.stringify(text) + ", expected 3 others");
+        await who.page.waitForTimeout(1500);
         await shot(who, "lobby-crowd-" + theme);
         await who.page.getByTestId("lobby.others").click();
         await who.page.getByText(/^\d+ in this call$/).waitFor({ timeout: 10_000 });
-        await who.page.waitForTimeout(700);
+        await who.page.waitForTimeout(2200);
         await shot(who, "lobby-crowd-open-" + theme);
         await who.page.keyboard.press("Escape");
         await who.page.waitForTimeout(300);
