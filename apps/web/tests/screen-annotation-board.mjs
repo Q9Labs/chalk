@@ -3,7 +3,6 @@ import { runJourney } from "../../../.agents/skills/verify-chalk/scripts/journey
 
 const canvasSelector = '[data-part="screen-annotation-layer"]';
 const wait = { timeout: 35_000 };
-const saveAction = { name: "Save frame to board", exact: true };
 
 await runJourney("screen-annotation-board", async ({ step, person, startCall, joinByLink, control, shot }) => {
   const sharer = await person("Sharer", 1, { display: true, permission: "granted", record: false });
@@ -46,9 +45,11 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
         await route.fulfill({ response });
       }
     });
-    await drawer.page.getByRole("button", saveAction).click(wait);
+    await drawer.page.getByRole("button", { name: "More", exact: true }).click(wait);
+    await drawer.page.getByRole("menuitem", { name: /^Save to board/ }).click(wait);
     await drawer.page.getByRole("alert").filter({ hasText: "The annotated frame could not be saved." }).waitFor(wait);
-    await drawer.page.getByRole("button", saveAction).click(wait);
+    await drawer.page.getByRole("button", { name: "More", exact: true }).click(wait);
+    await drawer.page.getByRole("menuitem", { name: /^Save to board/ }).click(wait);
     await drawer.page.getByRole("status").filter({ hasText: "Frame saved to the board." }).waitFor(wait);
     assert.ok(droppedFinalize);
     assert.equal(uploadIds.length, 2);
