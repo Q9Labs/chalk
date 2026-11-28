@@ -9,6 +9,7 @@ export function ChalkPopover({
   label,
   className,
   alignOffset = 0,
+  align = "start",
   side = "bottom",
   tooltip,
   open,
@@ -22,6 +23,7 @@ export function ChalkPopover({
   readonly className?: string;
   readonly tooltip?: string;
   readonly alignOffset?: number;
+  readonly align?: "start" | "end";
   readonly side?: "top" | "bottom";
 }) {
   const [holder, setHolder] = useState<HTMLSpanElement | null>(null);
@@ -32,7 +34,7 @@ export function ChalkPopover({
       <Popover.Root open={open} onOpenChange={onOpenChange}>
         {tooltip ? <ChalkTooltip trigger={<Popover.Trigger render={trigger} />}>{tooltip}</ChalkTooltip> : <Popover.Trigger render={trigger} />}
         <Popover.Portal container={root ?? holder}>
-          <Popover.Positioner side={side} align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={8} collisionBoundary={root ?? undefined} className="chalk-popover-positioner">
+          <Popover.Positioner side={side} align={align} alignOffset={alignOffset} sideOffset={8} collisionPadding={8} collisionBoundary={root ?? undefined} className="chalk-popover-positioner">
             <Popover.Popup aria-label={label} data-part="popover" className={["chalk-menu chalk-popover", className].filter(Boolean).join(" ")} style={{ maxHeight: "var(--available-height)", maxWidth: "var(--available-width)", overflowY: "auto", overscrollBehavior: "contain" }}>
               {children}
             </Popover.Popup>

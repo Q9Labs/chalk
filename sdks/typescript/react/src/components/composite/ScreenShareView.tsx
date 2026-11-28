@@ -149,7 +149,6 @@ export function ScreenSharePresentation({
       >
         {ownBigShare ? (
           <LocalShareControls
-            capture={capture}
             pending={pending}
             titleHost={setTitleHost}
             policyHost={setPolicyHost}

@@ -91,7 +91,7 @@ export function AnnotationPictureInPicture({ inTab, helperAvailable, hints = fal
   return (
     <>
       <ChalkTooltipIf hint={hints ? "Pop out marks" : undefined}>
-        <button type="button" className="chalk-ann-btn" disabled={opening} onClick={() => void open()}>
+        <button type="button" className="chalk-ann-pill" disabled={opening} onClick={() => void open()}>
           <HugeiconsIcon icon={PictureInPictureOnIcon} size={16} aria-hidden="true" />
           <span className="chalk-ann-label">{popup ? "Close marks preview" : "Pop out marks"}</span>
         </button>

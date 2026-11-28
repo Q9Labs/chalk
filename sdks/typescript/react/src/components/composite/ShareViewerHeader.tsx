@@ -5,8 +5,14 @@ import { StageIcon } from "../stage/StageIcon";
 export function ShareViewerHeader({ name, withAudio, host }: { readonly name: string; readonly withAudio: boolean; readonly host: (element: HTMLElement | null) => void }) {
   const phone = usePhoneCall();
   return (
-    <div data-part="share-viewer-header" data-phone={phone ? "" : undefined} role="group" aria-label="Screen controls" className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--chalk-line)] pr-2 pl-3.5 text-(length:--type-caption) text-[var(--chalk-text)]">
-      <StageIcon name="share" size={18} className="shrink-0 text-[var(--chalk-soft-text)]" />
+    <div
+      data-part="share-viewer-header"
+      data-phone={phone ? "" : undefined}
+      role="group"
+      aria-label="Screen controls"
+      className={`flex ${phone ? "h-12 pl-2.5" : "h-13 pl-3.5"} shrink-0 items-center gap-2 border-b border-[var(--chalk-line)] bg-[var(--chalk-surface)] pr-2 text-(length:--type-body) text-[var(--chalk-text)]`}
+    >
+      <StageIcon name="share" size={18} className="chalk-share-icon shrink-0 text-[var(--chalk-soft-text)]" />
       <span dir="auto" className="chalk-share-name min-w-0 flex-1 truncate font-semibold [unicode-bidi:plaintext]">
         {name}
       </span>

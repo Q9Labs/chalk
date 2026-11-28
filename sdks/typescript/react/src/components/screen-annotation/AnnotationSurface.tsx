@@ -163,15 +163,13 @@ function ActiveAnnotationSurface({
             headerHost,
           )
         : null}
-      {isLocal && primary && connected && !phone && titleHost
-        ? createPortal(<SharerTitle client={client} state={state} presence={presence} actorId={actorId} people={people} helperShowing={helperShowing} command={run} />, titleHost)
-        : null}
-      {isLocal && primary && connected && !phone && policyHost
+      {isLocal && primary && connected && titleHost ? createPortal(<SharerTitle client={client} state={state} presence={presence} actorId={actorId} people={people} helperShowing={helperShowing} command={run} />, titleHost) : null}
+      {isLocal && primary && connected && policyHost
         ? createPortal(
             <>
               <WhoCanDrawMenu state={state} command={run} />
-              {canPopOut ? <AnnotationPictureInPicture {...presentation} viewerId={actorId} track={track} inTab={safePreview} helperAvailable={helperOffered} /> : null}
-              {helperOffered && !helperShowing ? (
+              {canPopOut && !phone ? <AnnotationPictureInPicture {...presentation} viewerId={actorId} track={track} inTab={safePreview} helperAvailable={helperOffered} /> : null}
+              {helperOffered && !helperShowing && !phone ? (
                 <button type="button" className="chalk-ann-pill" onClick={() => setHelperOpen(true)}>
                   <HugeiconsIcon icon={PencilEdit02Icon} size={16} aria-hidden="true" />
                   Show on my screen

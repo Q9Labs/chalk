@@ -63,7 +63,7 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBr
   const shape = shapes.find((entry) => entry.tool === brush.tool);
   return (
     <div role="toolbar" aria-label="Drawing tools" data-part="screen-annotation-toolbar" className="chalk-hd-tools">
-      <ToolButton label="Laser pointer" pressed={brush.tool === "pointer"} onClick={() => pick("pointer")} icon={Cursor01Icon} />
+      {phone ? null : <ToolButton label="Laser pointer" pressed={brush.tool === "pointer"} onClick={() => pick("pointer")} icon={Cursor01Icon} />}
       <ToolButton label="Pen" pressed={brush.tool === "pen"} onClick={() => pick("pen")} icon={PencilEdit02Icon} />
       <ToolButton label="Highlighter" pressed={brush.tool === "highlighter"} onClick={() => pick("highlighter")} icon={HighlighterIcon} />
       <ChalkPopover
@@ -96,6 +96,7 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBr
       <ChalkPopover
         label="Colour"
         side="bottom"
+        align="end"
         trigger={
           <button type="button" className="chalk-ann-btn" aria-label="Colour">
             <span aria-hidden="true" className="chalk-ann-dot" style={{ backgroundColor: paint }} />
@@ -130,10 +131,16 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBr
         }
       >
         {phone ? (
-          <Menu.Item className="chalk-menu-item" onClick={() => pick("text")}>
-            <HugeiconsIcon icon={TextFontIcon} size={18} aria-hidden="true" />
-            Text
-          </Menu.Item>
+          <>
+            <Menu.Item className="chalk-menu-item" onClick={() => pick("pointer")}>
+              <HugeiconsIcon icon={Cursor01Icon} size={18} aria-hidden="true" />
+              Laser pointer
+            </Menu.Item>
+            <Menu.Item className="chalk-menu-item" onClick={() => pick("text")}>
+              <HugeiconsIcon icon={TextFontIcon} size={18} aria-hidden="true" />
+              Text
+            </Menu.Item>
+          </>
         ) : null}
         <Menu.Item className="chalk-menu-item" onClick={() => onCommand({ kind: "redo" })}>
           <HugeiconsIcon icon={Redo02Icon} size={18} aria-hidden="true" />

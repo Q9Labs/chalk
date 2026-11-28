@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { firstName } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState } from "@q9labsai/chalk-client";
 import { useEffect, useState } from "react";
+import { usePhoneCall } from "../../internal/call-width";
 import { ChalkMenu, ChalkMenuPrimitive as Menu, ChalkSpinner } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 import { canDraw, visibleMarks } from "./model";
@@ -80,13 +81,14 @@ export function DrawEntry({ client, state, actorId, sharerName, onDraw, onReques
 /** The sharer's "Who can draw" pill and its menu. */
 export function WhoCanDrawMenu({ state, command }: { readonly state: ScreenAnnotationState; readonly command: (command: ScreenAnnotationCommand) => void }) {
   const policy = state.access.draw_policy;
+  const phone = usePhoneCall();
   return (
     <ChalkMenu
       side="bottom"
       trigger={
         <button type="button" className="chalk-ann-pill" aria-label={`Who can draw: ${policyLabel(policy)}`}>
           <HugeiconsIcon icon={UserGroupIcon} size={16} aria-hidden="true" />
-          <span>Who can draw: {policyLabel(policy)}</span>
+          {phone ? null : <span>Who can draw: {policyLabel(policy)}</span>}
           <HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true" />
         </button>
       }

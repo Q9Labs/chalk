@@ -16,5 +16,5 @@ export const SCREEN_ANNOTATION_STATES: readonly CallState[] = [
   { id: "share-sharer-drawing", title: "Share: sharer sees someone drawing", render: () => <ScreenAnnotationFixture view="host" marks /> },
   { id: "share-sharer-request", title: "Share: sharer allows a request", render: () => <ScreenAnnotationFixture view="host" policy="picked" asked /> },
   { id: "share-sharer-who", title: "Share: who can draw menu", actions: [{ click: "Who can draw: Everyone" }, { wait: 300 }], render: () => <ScreenAnnotationFixture view="host" marks /> },
-  { id: "share-sharer-helper", title: "Share: show marks on my screen", actions: [{ click: "Show marks on my screen" }, { wait: 300 }], render: () => <ScreenAnnotationFixture view="host" marks captureSurface="monitor" /> },
+  { id: "share-sharer-helper", title: "Share: show marks on my screen", actions: [{ click: "Show on my screen" }, { wait: 300 }], render: () => <ScreenAnnotationFixture view="host" marks captureSurface="monitor" /> },
 ];

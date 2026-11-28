@@ -1,4 +1,4 @@
-import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
+import type { ScreenShareOptions } from "@q9labsai/chalk-client";
 import { usePhoneCall } from "../../internal/call-width";
 import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 
@@ -7,14 +7,12 @@ import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
  * The sharer's title line and the drawing buttons are portalled in through the two hosts.
  */
 export function LocalShareControls({
-  capture,
   pending,
   onChangeShare,
   onStopSharing,
   titleHost,
   policyHost,
 }: {
-  readonly capture?: ScreenShareCapture;
   readonly pending: boolean;
   readonly onChangeShare?: (options: ScreenShareOptions) => void;
   readonly onStopSharing?: () => void;
@@ -22,20 +20,25 @@ export function LocalShareControls({
   readonly policyHost?: (element: HTMLElement | null) => void;
 }) {
   const phone = usePhoneCall();
-  const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : capture?.surface === "monitor" ? "your screen" : null;
   return (
     <div className="shrink-0">
-      <div data-part="share-local-overlay" role="group" aria-label="Your share" className="group/hd relative z-30 flex h-12 items-center gap-1.5 border-b border-[var(--chalk-line)] pr-2 pl-3.5 text-(length:--type-caption) text-[var(--chalk-text)]">
+      <div
+        data-part="share-local-overlay"
+        data-phone={phone ? "" : undefined}
+        role="group"
+        aria-label="Your share"
+        className={`group/hd relative z-30 flex ${phone ? "h-12 pl-2.5" : "h-13 pl-3.5"} items-center gap-1.5 border-b border-[var(--chalk-line)] bg-[var(--chalk-surface)] pr-2 text-(length:--type-body) text-[var(--chalk-text)]`}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2 group-has-[[data-part=sharer-title]]/hd:flex-none group-has-[[data-request]]/hd:hidden">
           <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-[var(--chalk-danger)]" />
-          <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
+          <b className="truncate font-semibold">{phone ? "Sharing" : "You’re sharing"}</b>
         </div>
         <div ref={titleHost} className="contents" />
         <div ref={policyHost} className="contents group-has-[[data-request]]/hd:hidden" />
         {onChangeShare && !phone ? (
           <ChalkMenu
             trigger={
-              <ChalkButton disabled={pending} className="!h-[34px] !bg-[var(--chalk-raised)] !px-3.5 !text-[var(--chalk-text)] hover:!bg-[var(--chalk-hover)]">
+              <ChalkButton disabled={pending} className="!h-[34px] !bg-[var(--chalk-raised)] !px-3.5 !text-[var(--chalk-text)] hover:!bg-[var(--chalk-hover)] group-has-[[data-request]]/hd:!hidden">
                 Change
               </ChalkButton>
             }
@@ -54,8 +57,8 @@ export function LocalShareControls({
           </ChalkMenu>
         ) : null}
         {onStopSharing ? (
-          <ChalkButton disabled={pending} tone="danger" className="!h-[34px] !bg-[var(--chalk-danger)] !px-3.5 !text-white hover:!bg-[var(--chalk-danger-hover)]" onClick={onStopSharing}>
-            Stop sharing
+          <ChalkButton disabled={pending} tone="danger" className={`!h-[34px] !bg-[var(--chalk-danger)] !px-3.5 !text-[var(--chalk-on-overlay)] hover:!bg-[var(--chalk-danger-hover)]${phone ? " group-has-[[data-request]]/hd:!hidden" : ""}`} aria-label="Stop sharing" onClick={onStopSharing}>
+            {phone ? "Stop" : "Stop sharing"}
           </ChalkButton>
         ) : null}
       </div>
