@@ -1,5 +1,35 @@
 # Changelog
 
+## 6.3.0
+
+This minor release adds Focus, AI participant markers and the lobby roster, a redesigned presenter and annotation surface, and server SDK coverage for transcripts, webhook endpoints and Scheduled Episodes, plus fixes for joins that lost remote media, `endEpisode` and refused devices.
+
+### Focus
+
+- Focus is a Space setting, off by default. When a host turns it on, participants who may view it see when someone has left the call window, with tile chips, People panel grouping, a step-away control and host allowance windows. The `focus.view`, `focus.manage` and `focus.exempt` capabilities control who sees, manages and is left out. `@q9labsai/chalk-react` adds `useFocus`, the client adds `focusChanged` and the `space.focus.*` settings, and `@q9labsai/chalk-react-native` reports its AppState. Older clients negotiate nothing and receive no Focus fields. Apply the `focus_v1` and `focus_command_receipts` migrations before deploying the API and Sync (#1632).
+- Webhooks gain `participant.focus_changed`, sent after a state holds for ten seconds, and `focus.completed`, sent when an Episode ends. `GET .../episodes/{episode_id}/focus` returns the Episode's Focus artifact (#1632).
+
+### AI participants
+
+- Only a service principal or a Tenant API key can admit a participant with `identity_kind: "agent"`. Calls mark AI participants with a sparkle after the name (#1629).
+- The lobby shows who is already in the call before a visitor joins, on web and in React Native. The roster carries only display names and identity kinds (#1638).
+
+### Presenting and annotation
+
+- Hosts can present Office, OpenDocument and plain-text files on the Stage. This stays behind the Office capability flag (#1774).
+- Presenter controls are one header over the page, Present a file lives in the Share menu, and dropping a file shows upload progress and a placeholder. `storeUpload` takes an optional `onProgress` (#1766).
+- Screen annotation has one drawing bar and a Who can draw control with Everyone, Ask first and Only hosts, and Chalk Helper pairing is one step under the share header (#1777, #1778).
+
+### Server SDK
+
+- `createChalkServerClient` covers Transcript listing, retrieval, deletion and on-demand requests, webhook endpoints with revisions, secrets and deliveries, Scheduled Episodes, and tenant handovers. Participant admission forwards `admission` and Space updates forward `metadata` (#1627, #1635).
+
+### Fixes
+
+- A join that holds no grant asks the app for a media connection of its own, so a page restored from the back-forward cache no longer leaves every remote track failing with `duplicate_track` (#1773).
+- `endEpisode` resolves when the end stops Sync before the acknowledgement arrives, instead of rejecting with `client_stopped` (#1763).
+- A microphone or camera the browser refused is no longer requested again until the person acts or the permission changes, and the device-access card shows recovery steps for iPhone Safari, Chrome on iPhone, Android Chrome, macOS and Windows (#1782).
+
 ## 6.2.0
 
 This minor release adds Stage file presenting, chat file drop and paste, and iPhone and iPad screen sharing, plus fixes for iPhone cameras, the mobile board and restrictive networks.

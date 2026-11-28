@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 6.3.0
 
 - A microphone or camera the browser refused is no longer asked for again until the person acts or the browser's permission changes. Before, a join retry or a failed command that ran again asked the browser each time, and every refusal reported a `device_failed` event. Joining, turning a device on and the camera preview count as the person acting.
 - `connection.lastError` names the devices a join went ahead without (`devices`) and carries `permissionBlock` when the browser says the operating system refused capture, so an app can show recovery steps for a refusal at join time.
