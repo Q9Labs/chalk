@@ -79,6 +79,7 @@ export function ScreenSharePresentation({
   const [headerHost, setHeaderHost] = useState<HTMLElement | null>(null);
   const [titleHost, setTitleHost] = useState<HTMLElement | null>(null);
   const [policyHost, setPolicyHost] = useState<HTMLElement | null>(null);
+  const [noticeHost, setNoticeHost] = useState<HTMLElement | null>(null);
   const [fill, setFill] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [poppedOut, setPoppedOut] = useState(false);
@@ -151,6 +152,7 @@ export function ScreenSharePresentation({
             pending={pending}
             titleHost={setTitleHost}
             policyHost={setPolicyHost}
+            noticeHost={setNoticeHost}
             onChangeShare={onChangeShare ? (options) => void run(() => onChangeShare(options), "screen", "start") : undefined}
             onStopSharing={onStopSharing ? () => void run(onStopSharing, "screen", "stop") : undefined}
           />
@@ -181,6 +183,7 @@ export function ScreenSharePresentation({
                 headerHost={headerHost}
                 titleHost={titleHost}
                 policyHost={policyHost}
+                noticeHost={noticeHost}
               />
             </Suspense>
           ) : null}

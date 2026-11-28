@@ -10,7 +10,7 @@ test("a Sync update paints the live overlay before the next upkeep poll", async 
   let paints = 0;
   const source = readFileSync(new URL("../ui/view.js", import.meta.url), "utf8")
     .split("\n")
-    .slice(1)
+    .filter((line) => !line.startsWith("import "))
     .join("\n");
   runInNewContext(source, {
     document: { querySelector: () => ({ querySelector: () => ({ addEventListener() {} }) }) },
@@ -25,6 +25,8 @@ test("a Sync update paints the live overlay before the next upkeep poll", async 
     paintLive: () => {
       paints++;
     },
+    paintSettings: () => {},
+    mountSettings: () => {},
     setTimeout: (callback) => {
       pending.add(callback);
       return callback;

@@ -161,6 +161,18 @@ function useFixtureTrack() {
   return track;
 }
 
+type HelperFixture = "offer" | "fingerprint" | "confirm" | "connected";
+
+const fingerprint = "4F2A-91C0";
+const approval = (attach: (status: (value: "ready") => void, ask: (signal: AbortSignal) => Promise<string>) => Promise<void>) => async () => ({ kind: "approval" as const, fingerprint, remembered: false, attach });
+
+const helperFixtures = {
+  offer: { challenge: async () => Promise.reject(new DOMException("Local access denied", "NotAllowedError")) },
+  fingerprint: { challenge: approval(() => new Promise<void>(() => {})) },
+  confirm: { challenge: approval((_status, ask) => ask(new AbortController().signal).then(() => new Promise<void>(() => {}))) },
+  connected: { challenge: approval(async (status) => status("ready")) },
+} as const;
+
 const at = (x: number, y: number) => ({ x: Math.round(x * 65535), y: Math.round(y * 65535) });
 const stroke = (id: string, color: string, shape: ScreenAnnotationDraft["shape"]): ScreenAnnotationDraft => ({ mark_id: id, lifetime: "keep", color, width: 192, shape });
 
@@ -172,9 +184,10 @@ export interface ScreenAnnotationScene {
   /** Both people have already drawn on the share. */
   readonly marks?: boolean;
   readonly captureSurface?: "browser" | "monitor";
+  readonly helper?: HelperFixture;
 }
 
-export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", asked = false, marks = false, captureSurface = "browser" }: ScreenAnnotationScene = {}) {
+export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", asked = false, marks = false, captureSurface = "browser", helper }: ScreenAnnotationScene = {}) {
   const [fixture] = useState(() => {
     const made = createAnnotationFixture();
     void (async () => {
@@ -189,7 +202,7 @@ export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", 
     return made;
   });
   const [saved, setSaved] = useState(0);
-  const [hostView, setHostView] = useState(view === "host");
+  const [hostView, setHostView] = useState(view === "host" || helper !== undefined);
   const track = useFixtureTrack();
   const actions: ScreenAnnotationActions = { saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
   const people = [viewer, sharer].map((person) => ({ id: person.participant_id, name: person.display_name, roleCanDraw: true, managesPolicy: person === sharer }));
@@ -221,7 +234,7 @@ export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", 
             isLocal={hostView}
             onStopSharing={hostView ? async () => fixture.end() : undefined}
             onChangeShare={hostView ? async () => undefined : undefined}
-            capture={hostView ? { surface: captureSurface, label: null } : undefined}
+            capture={hostView ? { surface: helper ? "monitor" : captureSurface, label: null } : undefined}
             annotationContext={{ actorId: actor.participant_id, actorName: actor.display_name, people, grants: [] }}
             annotation={{
               client: hostView ? fixture.hostClient : fixture.viewerClient,
@@ -230,10 +243,12 @@ export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", 
               fontUrl: webAnnotation.fontUrl,
               offerPngDownload: webAnnotation.offerPngDownload,
               helper: {
-                installUrl: "https://example.test/chalk-helper",
-                challenge: async () => {
-                  throw new DOMException("Local access denied", "NotAllowedError");
-                },
+                installUrl: helper ? "https://downloads.chalkmeet.com/helper/" : undefined,
+                challenge: helper
+                  ? helperFixtures[helper].challenge
+                  : async () => {
+                      throw new DOMException("Local access denied", "NotAllowedError");
+                    },
                 lookupCode: async () => ({ deviceName: "Demo Mac", approve: async (status) => status("ready") }),
               },
             }}

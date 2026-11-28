@@ -12,16 +12,18 @@ export function LocalShareControls({
   onStopSharing,
   titleHost,
   policyHost,
+  noticeHost,
 }: {
   readonly pending: boolean;
   readonly onChangeShare?: (options: ScreenShareOptions) => void;
   readonly onStopSharing?: () => void;
   readonly titleHost?: (element: HTMLElement | null) => void;
   readonly policyHost?: (element: HTMLElement | null) => void;
+  readonly noticeHost?: (element: HTMLElement | null) => void;
 }) {
   const phone = usePhoneCall();
   return (
-    <div className="shrink-0">
+    <div data-part="share-local-wrap" className="shrink-0">
       <div
         data-part="share-local-overlay"
         data-phone={phone ? "" : undefined}
@@ -38,7 +40,7 @@ export function LocalShareControls({
         {onChangeShare && !phone ? (
           <ChalkMenu
             trigger={
-              <ChalkButton disabled={pending} className="!h-[34px] !bg-[var(--chalk-raised)] !px-3.5 !text-[var(--chalk-text)] hover:!bg-[var(--chalk-hover)] group-has-[[data-request]]/hd:!hidden">
+              <ChalkButton disabled={pending} data-helper-hide="" className="!h-[34px] !bg-[var(--chalk-raised)] !px-3.5 !text-[var(--chalk-text)] hover:!bg-[var(--chalk-hover)] group-has-[[data-request]]/hd:!hidden">
                 Change
               </ChalkButton>
             }
@@ -62,6 +64,7 @@ export function LocalShareControls({
           </ChalkButton>
         ) : null}
       </div>
+      <div ref={noticeHost} className="contents" />
     </div>
   );
 }

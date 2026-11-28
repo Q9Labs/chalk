@@ -12,6 +12,7 @@ use tauri::{
     App, AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::{
@@ -93,7 +94,9 @@ pub struct View {
     approval: Option<crate::pairing::ApprovalPrompt>,
     connected: bool,
     live_drawing_available: bool,
-    monitors: Vec<String>,
+    monitors: Vec<MonitorView>,
+    capture_status: Option<&'static str>,
+    launch_at_login: bool,
     can_follow_window: bool,
     overlay: Option<live::Overlay>,
     update_available: bool,
@@ -102,9 +105,18 @@ pub struct View {
     permission: Option<permission::View>,
 }
 
+#[derive(Serialize)]
+struct MonitorView {
+    name: String,
+    width: u32,
+    height: u32,
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    Disconnect,
+    SetLaunchAtLogin { enabled: bool },
     ChangeStyle { style: Style },
     CheckForUpdate,
     StartDeviceCode { tenant_id: String },
@@ -306,7 +318,7 @@ fn apply(app: &AppHandle, effects: Vec<Effect>) {
 fn create_settings(app: &AppHandle) -> tauri::Result<()> {
     let window = window(app, "settings")
         .title("Chalk Helper")
-        .inner_size(360.0, 410.0)
+        .inner_size(460.0, 640.0)
         .center()
         .content_protected(true)
         .visible(false)
@@ -724,6 +736,8 @@ fn allowed(label: &str, action: &Action) -> bool {
     match action {
         Action::ChangeStyle { .. } => matches!(label, "settings" | "hud"),
         Action::CheckForUpdate
+        | Action::Disconnect
+        | Action::SetLaunchAtLogin { .. }
         | Action::StartDeviceCode { .. }
         | Action::ForgetDevice
         | Action::DecidePairing { .. }
@@ -778,16 +792,27 @@ pub fn view(window: WebviewWindow, state: tauri::State<'_, Desktop>) -> View {
                 .unwrap_or_default()
                 .into_iter()
                 .enumerate()
-                .map(|(index, monitor)| {
-                    monitor
+                .map(|(index, monitor)| MonitorView {
+                    name: monitor
                         .name()
                         .cloned()
-                        .unwrap_or_else(|| format!("Display {}", index + 1))
+                        .unwrap_or_else(|| format!("Display {}", index + 1)),
+                    width: monitor.size().width,
+                    height: monitor.size().height,
                 })
                 .collect()
         } else {
             Vec::new()
         },
+        capture_status: (window.label() == "settings")
+            .then(|| local.pairing.as_ref()?.capture_status())
+            .flatten(),
+        launch_at_login: window.label() == "settings"
+            && window
+                .app_handle()
+                .autolaunch()
+                .is_enabled()
+                .unwrap_or(false),
         overlay: (window.label() == live::OVERLAY)
             .then(|| local.pairing.as_ref()?.overlay())
             .flatten(),
@@ -862,6 +887,21 @@ pub fn act(
                 pairing.decide(&fingerprint, allowed);
             }
             return Ok(());
+        }
+        Action::Disconnect => {
+            if let Some(pairing) = local.pairing.as_ref() {
+                pairing.disconnect();
+            }
+            return Ok(());
+        }
+        Action::SetLaunchAtLogin { enabled } => {
+            let manager = app.autolaunch();
+            let result = if enabled {
+                manager.enable()
+            } else {
+                manager.disable()
+            };
+            return result.map_err(|_| "Could not change the login setting.".to_owned());
         }
         Action::FollowWindow => {
             let pairing = local.pairing.clone().ok_or("No Helper session.")?;

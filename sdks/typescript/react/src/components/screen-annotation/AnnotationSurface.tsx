@@ -33,6 +33,7 @@ type SurfaceProps = AnnotationPresentationContext & {
   readonly headerHost?: HTMLElement | null;
   readonly titleHost?: HTMLElement | null;
   readonly policyHost?: HTMLElement | null;
+  readonly noticeHost?: HTMLElement | null;
 };
 
 export default function AnnotationSurface({ annotation, board, ...props }: SurfaceProps): React.JSX.Element | null {
@@ -81,6 +82,7 @@ function ActiveAnnotationSurface({
   headerHost,
   titleHost,
   policyHost,
+  noticeHost,
   fit,
   track,
   primary,
@@ -128,7 +130,7 @@ function ActiveAnnotationSurface({
       {primary && connected ? (
         <AnnotationDock isLocal={isLocal} feedback={exportActions.feedback}>
           {isLocal ? (
-            <SharerControls titleHost={titleHost} policyHost={policyHost} presentation={presentation} actorId={actorId} people={people} track={track} capture={capture} safePreview={safePreview} helper={helper} run={run} />
+            <SharerControls titleHost={titleHost} policyHost={policyHost} noticeHost={noticeHost} presentation={presentation} actorId={actorId} people={people} track={track} capture={capture} safePreview={safePreview} helper={helper} run={run} />
           ) : (
             <ViewerControls host={headerHost} client={client} state={state} actorId={actorId} sharerName={sharerName} drawing={drawing} brush={brush} onBrushChange={setBrush} onToolsOpenChange={setToolsOpen} exportActions={exportActions} run={run} />
           )}

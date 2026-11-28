@@ -33,6 +33,8 @@ const jscpdIgnore = [
   "**/.git/**",
   "**/pnpm-lock.yaml",
   "**/*.lock",
+  // A font licence is copied verbatim beside each font file.
+  "**/*OFL.txt",
   "**/*.test.*",
   "**/*_test.go",
   "**/test/**",

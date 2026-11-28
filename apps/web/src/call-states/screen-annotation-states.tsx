@@ -16,5 +16,9 @@ export const SCREEN_ANNOTATION_STATES: readonly CallState[] = [
   { id: "share-sharer-drawing", title: "Share: sharer sees someone drawing", render: () => <ScreenAnnotationFixture view="host" marks /> },
   { id: "share-sharer-request", title: "Share: sharer allows a request", render: () => <ScreenAnnotationFixture view="host" policy="picked" asked /> },
   { id: "share-sharer-who", title: "Share: who can draw menu", actions: [{ click: "Who can draw: Everyone" }, { wait: 300 }], render: () => <ScreenAnnotationFixture view="host" marks /> },
+  { id: "helper-offer", title: "Chalk Helper offer", render: () => <ScreenAnnotationFixture helper="offer" marks /> },
+  { id: "helper-fingerprint", title: "Chalk Helper fingerprint", actions: [{ click: "I have it" }, { wait: 300 }], render: () => <ScreenAnnotationFixture helper="fingerprint" marks /> },
+  { id: "helper-confirm", title: "Chalk Helper confirmation code", actions: [{ click: "I have it" }, { wait: 300 }, { click: "It matches" }, { wait: 300 }], render: () => <ScreenAnnotationFixture helper="confirm" marks /> },
+  { id: "helper-connected", title: "Chalk Helper connected", actions: [{ click: "I have it" }, { wait: 300 }, { click: "It matches" }, { wait: 500 }], render: () => <ScreenAnnotationFixture helper="connected" marks /> },
   { id: "share-sharer-helper", title: "Share: show marks on my screen", actions: [{ click: "Show on my screen" }, { wait: 300 }], render: () => <ScreenAnnotationFixture view="host" marks captureSurface="monitor" /> },
 ];

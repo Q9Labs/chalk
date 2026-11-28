@@ -135,13 +135,13 @@ test("revoke during a gesture, ask first, allow, then the sharer shows marks thr
 test("the sharer connects Chalk Helper to show marks on their own screen", async ({ app, browser, screen }) => {
   await browser.goto("/call-states.html?state=share-sharer-helper");
   await screen.getByRole("button", "Show on my screen", { exact: true }).click();
-  await screen.getByRole("button", "Connect Chalk Helper", { exact: true }).click();
+  await screen.getByRole("button", "I have it", { exact: true }).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "Couldn’t reach Chalk Helper on this device." })).toBeVisible();
   await browser.locator("input[autocomplete=off]").fill("HJKX-4821");
   await screen.getByRole("button", "Find device", { exact: true }).click();
   await expect(browser.locator('[data-part="annotation-helper-offer"]')).toContainText("Allow Demo Mac to show marks on this share?");
   await screen.getByRole("button", "Allow this device", { exact: true }).click();
-  await expect(browser.locator('[role="status"]').filter({ hasText: "Marks show on your screen" })).toBeVisible();
+  await expect(browser.locator('[role="status"]').filter({ hasText: "Marks on your screen" })).toBeVisible();
   await app.screenshot("sharer-helper-approval");
 });
 
@@ -215,13 +215,12 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await joinGuest(host, mobile, invite, "Mobile Guest");
 
     const helperCard = (page: Page) => page.locator('[data-part="annotation-helper-offer"]');
-    const intro = "Viewers can draw on your share. Use Chalk Helper to see their marks on your screen.";
     await chooseShare(host, "Window", installer);
-    await helperCard(host).getByText(intro, { exact: true }).waitFor();
+    await helperCard(host).getByText("See marks on your own screen", { exact: true }).waitFor();
     expect(await helperCard(host).getByRole("link", { name: "Get Chalk Helper" }).getAttribute("href")).toBe(installer);
-    if (origin.startsWith("https:")) await helperCard(host).getByRole("button", { name: "Connect", exact: true }).waitFor();
+    if (origin.startsWith("https:")) await helperCard(host).getByRole("button", { name: "I have it", exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-prompt.png") });
-    await helperCard(host).getByRole("button", { name: "Not now", exact: true }).click();
+    await helperCard(host).getByRole("button", { name: "Close", exact: true }).click();
     await helperCard(host).waitFor({ state: "hidden" });
     await mobile.getByRole("button", { name: "Draw", exact: true }).waitFor();
     expect(await helperCard(mobile).count()).toBe(0);
@@ -237,25 +236,23 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await helperCard(host)
       .getByText(/Share your entire screen to use it/)
       .waitFor();
-    expect(await helperCard(host).getByRole("button", { name: "Connect", exact: true }).count()).toBe(0);
+    expect(await helperCard(host).getByRole("button", { name: "I have it", exact: true }).count()).toBe(0);
     if (evidence) await host.screenshot({ path: join(evidence, "opaque-window-helper-guidance.png") });
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 
     await chooseShare(guest, "Window", installer);
-    await helperCard(guest).getByText(intro, { exact: true }).waitFor();
+    await helperCard(guest).getByText("See marks on your own screen", { exact: true }).waitFor();
     expect(await guest.getByText("Marks aren’t visible on this device", { exact: true }).count()).toBe(0);
     if (evidence) await guest.screenshot({ path: join(evidence, "guest-window-no-pip-prompt.png") });
     await drawLiveMark(host);
-    await helperCard(guest)
-      .getByText(/is drawing on your share/)
-      .waitFor();
+    await guest.getByText(/is drawing/).waitFor();
     if (evidence) await guest.screenshot({ path: join(evidence, "guest-window-drawing.png") });
     if (origin.startsWith("https:")) {
-      await helperCard(guest).getByRole("button", { name: "Connect Chalk Helper", exact: true }).click();
+      await helperCard(guest).getByRole("button", { name: "I have it", exact: true }).click();
       await helperCard(guest).getByText("Couldn’t reach Chalk Helper on this device.", { exact: true }).waitFor();
       expect(await helperCard(guest).getByRole("button", { name: "Find device", exact: true }).count()).toBe(0);
-      await helperCard(guest).getByRole("button", { name: "Not now", exact: true }).click();
+      await helperCard(guest).getByRole("button", { name: "Close", exact: true }).click();
     }
     await stopShare(guest);
     await helperCard(guest).waitFor({ state: "detached" });
@@ -264,7 +261,7 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await host.getByRole("button", { name: "Show on my screen", exact: true }).waitFor();
     expect(await helperCard(host).count()).toBe(0);
     await host.getByRole("button", { name: "Show on my screen", exact: true }).click();
-    await helperCard(host).getByText(intro, { exact: true }).waitFor();
+    await helperCard(host).getByText("See marks on your own screen", { exact: true }).waitFor();
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 

@@ -41,6 +41,10 @@ fn main() {
                 })
                 .build(),
         )
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(desktop::Desktop::default())
         .invoke_handler(tauri::generate_handler![view, act])
         .setup(|app| {
