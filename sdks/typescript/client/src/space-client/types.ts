@@ -253,9 +253,7 @@ export type ClientEventMap = {
   readonly participantLeft: {
     readonly participant: Participant;
   };
-  readonly focusChanged: {
-    readonly participant: Participant;
-  };
+  readonly focusChanged: { readonly participant: Participant };
   readonly episodeEnded: {
     readonly episode: EpisodeSummary | null;
     readonly reason?: ConnectionSlice["episodeEndReason"];
