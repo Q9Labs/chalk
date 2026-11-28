@@ -70,6 +70,7 @@ export function ViewerControls({
 export function SharerControls({
   titleHost,
   policyHost,
+  noticeHost,
   presentation,
   actorId,
   people = noPeople,
@@ -81,6 +82,7 @@ export function SharerControls({
 }: {
   readonly titleHost?: HTMLElement | null;
   readonly policyHost?: HTMLElement | null;
+  readonly noticeHost?: HTMLElement | null;
   readonly presentation: Presentation;
   readonly actorId: string;
   readonly people?: readonly AnnotationPerson[];
@@ -98,8 +100,8 @@ export function SharerControls({
   const helperOffered = Boolean(helper?.installUrl) && capture?.surface !== "browser";
   return (
     <>
-      {helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} open={helperOpen} onOpenChange={setHelperOpen} onShowing={setHelperShowing} /> : null}
       <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} />
+      {helper && noticeHost ? createPortal(<AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} open={helperOpen} onOpenChange={setHelperOpen} onShowing={setHelperShowing} />, noticeHost) : null}
       {titleHost ? createPortal(<SharerTitle client={client} state={state} presence={presence} actorId={actorId} people={people} helperShowing={helperShowing} command={run} />, titleHost) : null}
       {policyHost
         ? createPortal(
@@ -107,7 +109,7 @@ export function SharerControls({
               <WhoCanDrawMenu state={state} command={run} />
               {canPopOut && !phone ? <AnnotationPictureInPicture {...presentation} viewerId={actorId} track={track} inTab={safePreview} helperAvailable={helperOffered} /> : null}
               {helperOffered && !helperShowing && !phone ? (
-                <button type="button" className="chalk-ann-pill" onClick={() => setHelperOpen(true)}>
+                <button type="button" className="chalk-ann-pill" data-helper-hide="" onClick={() => setHelperOpen(true)}>
                   <HugeiconsIcon icon={PencilEdit02Icon} size={16} aria-hidden="true" />
                   Show on my screen
                 </button>

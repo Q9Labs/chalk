@@ -148,6 +148,7 @@ export function SharerTitle({
   readonly helperShowing: boolean;
   readonly command: (command: ScreenAnnotationCommand) => void;
 }) {
+  const phone = usePhoneCall();
   const requests = useLiveRequests(client, state);
   const request = state.access.draw_policy === "picked" ? requests.find((entry) => entry.participant_id !== actorId) : undefined;
   if (request) {
@@ -175,7 +176,7 @@ export function SharerTitle({
       {helperShowing ? (
         <span className="chalk-ann-live">
           <i aria-hidden="true" />
-          Marks on your screen
+          {phone ? "On your screen" : "Marks on your screen"}
         </span>
       ) : null}
       {drawer ? <span className="chalk-ann-muted">{firstName(drawer)} is drawing</span> : null}

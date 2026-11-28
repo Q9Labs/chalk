@@ -1,5 +1,27 @@
-import type { HelperScreen } from "./HelperOfferActions";
+import { ChalkSpinner } from "../chalk-ui";
+import { HelperCopyButton } from "./HelperCopyButton";
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperStatus } from "./model";
+
+export type HelperScreen =
+  | { readonly kind: "idle" }
+  | { readonly kind: "looking" }
+  | { readonly kind: "attaching"; readonly fingerprint?: string }
+  | { readonly kind: "confirm"; readonly fingerprint: string; readonly submit: (code: string) => void }
+  | { readonly kind: "code"; readonly error?: string }
+  | { readonly kind: "fingerprint"; readonly value: string; readonly approve: () => Promise<void> }
+  | { readonly kind: "device"; readonly name: string; readonly fingerprint?: string; readonly approve: () => Promise<void> }
+  | { readonly kind: "status"; readonly status: ScreenAnnotationHelperStatus };
+
+const focusOnMount = (element: HTMLElement | null) => element?.focus();
+
+/** The Helper's confirmation code is 16 characters from this alphabet, shown and typed as four groups of four. */
+function groupedConfirmation(value: string): string {
+  const compact = value
+    .toUpperCase()
+    .replace(/[^A-HJ-NP-Z2-9]/g, "")
+    .slice(0, 16);
+  return (compact.match(/.{1,4}/g) ?? []).join("-");
+}
 
 const statuses: Record<ScreenAnnotationHelperStatus, string> = {
   waiting_for_sync: "Connecting Chalk Helper to the call…",
@@ -12,148 +34,248 @@ const statuses: Record<ScreenAnnotationHelperStatus, string> = {
   disconnected: "Chalk Helper disconnected.",
 };
 
-export function HelperOfferStep({
-  screen,
-  drawing,
-  guidance,
-  helper,
-  code,
-  setCode,
-  connect,
-  lookup,
-}: {
-  readonly screen: HelperScreen;
-  readonly drawing: string | null;
-  readonly guidance?: string;
-  readonly helper: ScreenAnnotationHelper;
-  readonly code: string;
-  readonly setCode: (value: string) => void;
-  readonly connect: () => Promise<void>;
-  readonly lookup: () => Promise<void>;
-}) {
-  const canConnect = !guidance && (helper.challenge || helper.lookupCode);
+function Pill({ tone, children, ...props }: { readonly tone?: "solid"; readonly children: React.ReactNode } & React.ComponentProps<"button">) {
   return (
-    <>
-      {screen.kind === "idle" ? (
-        <>
-          <p>
-            {drawing ? (
-              <>
-                <bdi>{drawing}</bdi> is drawing on your share.
-              </>
-            ) : (
-              "Viewers can draw on your share."
-            )}{" "}
-            {guidance ?? "Use Chalk Helper to see their marks on your screen."}
-          </p>
-          {canConnect ? (
-            <button type="button" className="chalk-ann-btn" data-tone={drawing ? "primary" : "outline"} onClick={() => void connect()}>
-              {drawing ? "Connect Chalk Helper" : "Connect"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-      {screen.kind === "looking" || (screen.kind === "attaching" && !screen.fingerprint) ? <p role="status">Connecting to Chalk Helper…</p> : null}
-      {screen.kind === "fingerprint" ? (
-        <>
-          <p>Chalk Helper will ask you to match this fingerprint.</p>
-          <code className="chalk-ann-code" dir="ltr">
-            {screen.value}
-          </code>
-          <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void screen.approve()}>
-            Open approval in Chalk Helper
-          </button>
-        </>
-      ) : null}
-      {screen.kind === "attaching" && screen.fingerprint ? (
-        <>
-          <p role="status">Approve in Chalk Helper only if its fingerprint matches.</p>
-          <code className="chalk-ann-code" dir="ltr">
-            {screen.fingerprint}
-          </code>
-        </>
-      ) : null}
-      {screen.kind === "code" ? <HelperDeviceCode error={screen.error} helper={helper} code={code} setCode={setCode} lookup={lookup} /> : null}
-      {screen.kind === "confirm" ? (
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            screen.submit(code);
-            setCode("");
-          }}
-        >
-          <p>
-            Match <code dir="ltr">{screen.fingerprint}</code> and choose Allow in the Chalk Helper app.
-          </p>
-          <label className="grid gap-1">
-            Confirmation code shown in the app
-            <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={19} autoComplete="off" spellCheck={false} className="rounded bg-[var(--chalk-tile)] px-2 py-1 text-[var(--chalk-text)]" />
-          </label>
-          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.replaceAll("-", "").trim().length !== 16}>
-            Confirm
-          </button>
-        </form>
-      ) : null}
-      {screen.kind === "device" ? (
-        <>
-          <p>
-            Allow <bdi>{screen.name}</bdi> to show marks on this share?
-          </p>
-          {screen.fingerprint ? (
-            <p>
-              Confirm this fingerprint in Chalk Helper: <code dir="ltr">{screen.fingerprint}</code>
-            </p>
-          ) : null}
-          <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void screen.approve()}>
-            Allow this device
-          </button>
-        </>
-      ) : null}
-      {screen.kind === "status" ? <p role="status">{statuses[screen.status]}</p> : null}
-      <ReconnectHelper screen={screen} enabled={Boolean(helper.challenge)} connect={connect} />
-    </>
-  );
-}
-
-function ReconnectHelper({ screen, enabled, connect }: { readonly screen: HelperScreen; readonly enabled: boolean; readonly connect: () => Promise<void> }) {
-  const disconnected = screen.kind === "status" && screen.status === "disconnected";
-  const failed = screen.kind === "code" && screen.error;
-  if (!enabled || (!disconnected && !failed)) return null;
-  return (
-    <button type="button" className="chalk-ann-btn" data-tone="primary" onClick={() => void connect()}>
-      Reconnect Chalk Helper
+    <button type="button" className="chalk-ann-pill" data-tone={tone} {...props}>
+      {children}
     </button>
   );
 }
 
-function HelperDeviceCode({ error, helper, code, setCode, lookup }: { readonly error?: string; readonly helper: ScreenAnnotationHelper; readonly code: string; readonly setCode: (value: string) => void; readonly lookup: () => Promise<void> }) {
+type StepProps = Parameters<typeof HelperOfferStep>[0];
+type Screen<K extends HelperScreen["kind"]> = Extract<HelperScreen, { readonly kind: K }>;
+
+const spinner = "size-4 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)]";
+
+function Row({ main, acts, role }: { readonly main: React.ReactNode; readonly acts?: React.ReactNode; readonly role?: "status" }) {
   return (
     <>
-      {error ? <p role="status">{error}</p> : null}
-      {helper.lookupCode ? (
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void lookup();
-          }}
-        >
-          {helper.deviceAccount ? (
-            <label className="chalk-ann-field">
-              Paste this account ID into Chalk Helper
-              <input readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input" />
-            </label>
-          ) : null}
-          <label className="chalk-ann-field">
-            Device code from Chalk Helper
-            <input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-ann-input" />
-          </label>
-          <button type="submit" className="chalk-ann-btn" data-tone="primary" disabled={code.trim().length < 6}>
-            Find device
-          </button>
-        </form>
-      ) : null}
+      <div className="chalk-pair-main" role={role}>
+        {main}
+      </div>
+      {acts ? <div className="chalk-pair-acts">{acts}</div> : null}
     </>
+  );
+}
+
+function Code({ children }: { readonly children: React.ReactNode }) {
+  return (
+    <code className="chalk-pair-code" dir="ltr">
+      {children}
+    </code>
+  );
+}
+
+function InstallLink({ url }: { readonly url?: string }) {
+  if (!url) return null;
+  return (
+    <a className="chalk-ann-pill" data-tone="solid" href={url} target="_blank" rel="noopener noreferrer">
+      Get Chalk Helper
+    </a>
+  );
+}
+
+/** One step of the pairing row under the sharer's header: a label, one big element and one primary action. Returns nothing once marks show on the screen. */
+export function HelperOfferStep(props: { readonly screen: HelperScreen; readonly guidance?: string; readonly helper: ScreenAnnotationHelper; readonly code: string; readonly setCode: (value: string) => void; readonly connect: () => Promise<void>; readonly lookup: () => Promise<void> }) {
+  const { screen, helper, code, setCode, connect, lookup } = props;
+  switch (screen.kind) {
+    case "idle":
+      return <IdleStep {...props} />;
+    case "looking":
+      return <Row role="status" main={<WaitLabel label="Connecting">Connecting to Chalk Helper…</WaitLabel>} />;
+    case "attaching":
+      return screen.fingerprint ? (
+        <Row
+          role="status"
+          main={
+            <>
+              <WaitLabel label="Waiting for Chalk Helper">In Chalk Helper, press Yes, connect only if it shows</WaitLabel>
+              <Code>{screen.fingerprint}</Code>
+            </>
+          }
+        />
+      ) : (
+        <Row role="status" main={<WaitLabel label="Connecting">Connecting to Chalk Helper…</WaitLabel>} />
+      );
+    case "fingerprint":
+      return (
+        <Row
+          main={
+            <>
+              <p className="chalk-pair-label">Chalk Helper should show</p>
+              <Code>{screen.value}</Code>
+            </>
+          }
+          acts={
+            <Pill tone="solid" onClick={() => void screen.approve()}>
+              It matches
+            </Pill>
+          }
+        />
+      );
+    case "confirm":
+      return <ConfirmStep screen={screen} code={code} setCode={setCode} />;
+    case "code":
+      return <HelperDeviceCode error={screen.error} helper={helper} code={code} setCode={setCode} lookup={lookup} reconnect={helper.challenge ? connect : undefined} />;
+    case "device":
+      return (
+        <Row
+          main={
+            <>
+              <p className="chalk-pair-label">
+                Allow <bdi>{screen.name}</bdi> to show marks on this share?
+              </p>
+              {screen.fingerprint ? <Code>{screen.fingerprint}</Code> : null}
+            </>
+          }
+          acts={
+            <Pill tone="solid" onClick={() => void screen.approve()}>
+              Allow this device
+            </Pill>
+          }
+        />
+      );
+    case "status":
+      return <StatusStep status={screen.status} helper={helper} connect={connect} />;
+  }
+}
+
+function WaitLabel({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
+  return (
+    <p className="chalk-pair-label chalk-pair-wait">
+      <ChalkSpinner label={label} className={spinner} />
+      {children}
+    </p>
+  );
+}
+
+function IdleStep({ guidance, helper, connect }: StepProps) {
+  const canConnect = !guidance && (helper.challenge || helper.lookupCode);
+  return (
+    <Row
+      main={
+        <>
+          <p className="chalk-pair-title">See marks on your own screen</p>
+          {guidance ? <p className="chalk-pair-label">{guidance}</p> : null}
+        </>
+      }
+      acts={
+        <>
+          {canConnect ? <Pill onClick={() => void connect()}>I have it</Pill> : null}
+          <InstallLink url={helper.installUrl} />
+        </>
+      }
+    />
+  );
+}
+
+function ConfirmStep({ screen, code, setCode }: { readonly screen: Screen<"confirm">; readonly code: string; readonly setCode: (value: string) => void }) {
+  const complete = code.replaceAll("-", "").length === 16;
+  return (
+    <form
+      className="contents"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!complete) return;
+        screen.submit(code);
+        setCode("");
+      }}
+    >
+      <div className="chalk-pair-main">
+        <label className="chalk-pair-label block" htmlFor="chalk-helper-confirm">
+          Type the code from Chalk Helper
+        </label>
+        <input
+          id="chalk-helper-confirm"
+          ref={focusOnMount}
+          value={code}
+          onChange={(event) => setCode(groupedConfirmation(event.target.value))}
+          dir="ltr"
+          inputMode="text"
+          maxLength={19}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          className="chalk-pair-entry"
+        />
+      </div>
+      <div className="chalk-pair-acts">
+        <button type="submit" className="chalk-ann-pill" data-tone="solid" disabled={!complete}>
+          Connect
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function StatusStep({ status, helper, connect }: { readonly status: ScreenAnnotationHelperStatus; readonly helper: ScreenAnnotationHelper; readonly connect: () => Promise<void> }) {
+  if (status === "ready") return null;
+  return (
+    <Row
+      role="status"
+      main={<p className="chalk-pair-label">{statuses[status]}</p>}
+      acts={
+        <>
+          {status === "update_required" ? <InstallLink url={helper.installUrl} /> : null}
+          {status === "disconnected" && helper.challenge ? (
+            <Pill tone="solid" onClick={() => void connect()}>
+              Reconnect Chalk Helper
+            </Pill>
+          ) : null}
+        </>
+      }
+    />
+  );
+}
+
+function HelperDeviceCode({ error, helper, code, setCode, lookup, reconnect }: { readonly error?: string; readonly helper: ScreenAnnotationHelper; readonly code: string; readonly setCode: (value: string) => void; readonly lookup: () => Promise<void>; readonly reconnect?: () => Promise<void> }) {
+  if (!helper.lookupCode)
+    return (
+      <>
+        <div className="chalk-pair-main" role="status">
+          <p className="chalk-pair-label">{error ?? "Couldn’t connect to Chalk Helper."}</p>
+        </div>
+        <div className="chalk-pair-acts">
+          {reconnect ? (
+            <Pill tone="solid" onClick={() => void reconnect()}>
+              Reconnect Chalk Helper
+            </Pill>
+          ) : null}
+        </div>
+      </>
+    );
+  return (
+    <form
+      className="contents"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void lookup();
+      }}
+    >
+      <div className="chalk-pair-main">
+        {error ? (
+          <p role="status" className="chalk-pair-label">
+            {error}
+          </p>
+        ) : null}
+        {helper.deviceAccount ? (
+          <div className="chalk-pair-label flex items-center gap-2">
+            <label htmlFor="chalk-helper-account">Paste this account ID into Chalk Helper</label>
+            <input id="chalk-helper-account" readOnly value={helper.deviceAccount} onFocus={(event) => event.currentTarget.select()} dir="ltr" className="chalk-ann-input min-w-0 flex-1" />
+            <HelperCopyButton value={helper.deviceAccount} label="Copy account ID" />
+          </div>
+        ) : null}
+        <label className="chalk-pair-label block" htmlFor="chalk-helper-device-code">
+          Device code from Chalk Helper
+        </label>
+        <input id="chalk-helper-device-code" value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" maxLength={16} autoComplete="off" spellCheck={false} className="chalk-pair-entry" />
+      </div>
+      <div className="chalk-pair-acts">
+        <button type="submit" className="chalk-ann-pill" data-tone="solid" disabled={code.trim().length < 6}>
+          Find device
+        </button>
+      </div>
+    </form>
   );
 }
