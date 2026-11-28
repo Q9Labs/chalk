@@ -27,27 +27,30 @@ async function reported(devicePorts: DevicePorts, retry: () => Promise<unknown>)
 describe("a refused microphone", () => {
   it("is not retried when the page regains focus", async () => {
     const { devicePorts } = ports("granted");
-    const retry = vi.fn(async () => undefined);
+    const retries: number[] = [];
+    const retry = async () => void retries.push(retries.length);
     const page = new EventTarget();
     vi.stubGlobal("window", page);
     await reported(devicePorts, retry);
     page.dispatchEvent(new Event("focus"));
     vi.unstubAllGlobals();
-    expect(retry).not.toHaveBeenCalled();
+    expect(retries).toHaveLength(0);
   });
 
   it("is retried once when the browser permission turns granted", async () => {
     const { devicePorts, status } = ports("denied");
-    const retry = vi.fn(async () => undefined);
+    const retries: number[] = [];
+    const retry = async () => void retries.push(retries.length);
     await reported(devicePorts, retry);
     status.state = "granted";
     status.dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(retries).toHaveLength(1));
   });
 
   it("says it is still blocked only after a retry that failed", async () => {
     const { devicePorts } = ports("denied");
-    const retry = vi.fn(async () => undefined);
+    const retries: number[] = [];
+    const retry = async () => void retries.push(retries.length);
     const store = await reported(devicePorts, retry);
     expect(store.getSnapshot().issues.microphone?.stillBlocked).toBe(false);
     await store.retry("microphone");
@@ -60,9 +63,10 @@ describe("a refused microphone", () => {
 
   it("is retried on the person's request, one run at a time", async () => {
     const { devicePorts } = ports("denied");
-    const retry = vi.fn(async () => undefined);
+    const retries: number[] = [];
+    const retry = async () => void retries.push(retries.length);
     const store = await reported(devicePorts, retry);
     await Promise.all([store.retry("microphone"), store.retry("microphone")]);
-    expect(retry).toHaveBeenCalledTimes(1);
+    expect(retries).toHaveLength(1);
   });
 });
