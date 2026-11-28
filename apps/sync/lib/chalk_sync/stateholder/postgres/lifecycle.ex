@@ -11,6 +11,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   alias ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording
   alias ChalkSync.Stateholder.Postgres.Lifecycle.Participant
   alias ChalkSync.Stateholder.Postgres.LifecycleCommit
+  alias ChalkSync.Stateholder.Postgres.ParticipantDetails
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Authority, as: AuthoritySQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: SQL
@@ -117,7 +118,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
          payload = Participant.lifecycle_payload(intent, participant, state),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, Participant.lifecycle_name(intent.name), payload) do
-      decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
+      decision =
+        connection
+        |> LifecycleCommit.persist_commit(episode, intent, event, next_state)
+        |> overlay_join_details(connection, episode)
 
       AutomaticRecording.maybe_accept_automatic_recording(
         connection,
@@ -143,7 +147,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
     case Postgrex.query!(connection, SQL.read_lifecycle_event(), params).rows do
       [row] ->
-        event = Control.event_from_row(row)
+        event =
+          row
+          |> Control.event_from_row()
+          |> overlay_event_details(connection, episode)
 
         %LifecycleDecision{
           lifecycle_intent_id: lifecycle_intent_id,
@@ -174,6 +181,29 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   defp lifecycle_terminal_reason("participant_generation_replaced"),
     do: :participant_generation_replaced
+
+  defp overlay_join_details(%LifecycleDecision{event: event} = decision, connection, episode)
+       when is_map(event) do
+    %{decision | event: overlay_event_details(event, connection, episode)}
+  end
+
+  defp overlay_join_details(decision, _connection, _episode), do: decision
+
+  defp overlay_event_details(%{name: "participant_joined"} = event, connection, episode) do
+    details = ParticipantDetails.read!(connection, episode)
+    ParticipantDetails.overlay_event(event, details)
+  end
+
+  defp overlay_event_details(event, _connection, _episode), do: event
+
+  defp uncertain_event(row, connection, episode) do
+    event = Control.event_from_row(row)
+
+    case ParticipantDetails.read(connection, episode) do
+      {:ok, details} -> ParticipantDetails.overlay_event(event, details)
+      {:retryable, _reason} -> event
+    end
+  end
 
   def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
       when is_integer(generation) and generation > 0 do
@@ -208,7 +238,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
                result: :already_applied,
                event_id: UUID.load!(event_id),
                revision: revision,
-               event: Control.event_from_row(row)
+               event: uncertain_event(row, connection, episode)
              }}
 
           _ ->

@@ -79,21 +79,37 @@ func writeServiceUnavailable(w http.ResponseWriter) {
 	writeAPIError(w, apiErrorServiceUnavailable)
 }
 
-func acceptServiceCredential(credential authentication.ServiceCredential) func(http.Handler) http.Handler {
+func acceptServiceCredentials(credentials []authentication.ServiceCredential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, ok := bearerToken(r.Header.Get("Authorization"))
-			matched := 0
-			if ok && credential.ID != "" {
-				for _, secret := range credential.Secrets {
-					matched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+			if ok {
+				if credential := matchServiceCredential(credentials, token); credential != nil {
+					principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: credential.ID, Scopes: credential.Scopes}
+					r = r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal))
 				}
-			}
-			if matched == 1 {
-				principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: credential.ID, Scopes: credential.Scopes}
-				r = r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal))
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func matchServiceCredential(credentials []authentication.ServiceCredential, token string) *authentication.ServiceCredential {
+	var matched *authentication.ServiceCredential
+	ambiguous := false
+	for i := range credentials {
+		credential := &credentials[i]
+		secretMatch := 0
+		for _, secret := range credential.Secrets {
+			secretMatch |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+		}
+		if secretMatch == 1 && credential.ID != "" {
+			ambiguous = ambiguous || matched != nil
+			matched = credential
+		}
+	}
+	if ambiguous {
+		return nil
+	}
+	return matched
 }

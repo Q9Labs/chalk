@@ -3,10 +3,12 @@ defmodule ChalkSync.Transport.Socket.Frames do
   Frames a v1 socket sends: the projection context every outbound frame carries, and protocol errors.
   """
 
+  alias ChalkSync.DeviceKind
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
 
   @off_reason_keys ["off_reason", "off_revision"]
+  @participant_detail_keys ["identity_kind", "description"]
 
   def encode_with_context(state, encoded) when is_binary(encoded) do
     encode_with_context(state, JSON.decode!(encoded))
@@ -17,6 +19,7 @@ defmodule ChalkSync.Transport.Socket.Frames do
     |> own_identity_projection(state)
     |> device_projection(presence_hint_keys(state))
     |> media_projection(state)
+    |> participant_details_projection(state)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
@@ -33,10 +36,16 @@ defmodule ChalkSync.Transport.Socket.Frames do
   defp own_identity_projection(frame, _state), do: frame
 
   # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
-  defp presence_hint_keys(%{connection_quality: false} = state),
-    do: ["connection_quality" | device_hint_keys(state)]
+  defp presence_hint_keys(state),
+    do: quality_hint_keys(state) ++ device_kind_hint_keys(state) ++ device_hint_keys(state)
 
-  defp presence_hint_keys(state), do: device_hint_keys(state)
+  defp quality_hint_keys(%{connection_quality: false}), do: ["connection_quality"]
+  defp quality_hint_keys(_state), do: []
+
+  # The finer device is a second opt-in on top of the coarse hints: a client that sends only
+  # `participant_devices=1` validates presence items strictly and would reject the new key.
+  defp device_kind_hint_keys(%{participant_devices: true, participant_device_kinds: true}), do: []
+  defp device_kind_hint_keys(_state), do: ["device_kind"]
 
   defp device_hint_keys(%{participant_devices: false}),
     do: ["identity_id", "device_type", "admission_revision"]
@@ -62,9 +71,52 @@ defmodule ChalkSync.Transport.Socket.Frames do
 
   defp media_projection(frame, _state), do: frame
 
-  def device_type(nil), do: nil
+  # Participant detail fields are immutable rendering metadata, not canonical control state.
+  # Keep the exact earlier frame shape unless this socket negotiated the extension.
+  defp participant_details_projection(frame, %{participant_details: true}), do: frame
 
-  def device_type(agent) do
+  defp participant_details_projection(
+         %{"type" => "welcome", "snapshot" => snapshot} = frame,
+         _state
+       )
+       when is_map(snapshot) do
+    participants =
+      snapshot
+      |> Map.get("participants", [])
+      |> Enum.map(&Map.drop(&1, @participant_detail_keys))
+
+    put_in(frame, ["snapshot", "participants"], participants)
+  end
+
+  defp participant_details_projection(%{"type" => "event", "payload" => payload} = frame, _state)
+       when is_map(payload),
+       do: put_in(frame, ["payload"], Map.drop(payload, @participant_detail_keys))
+
+  defp participant_details_projection(
+         %{"type" => "replay_page", "events" => events} = frame,
+         _state
+       )
+       when is_list(events) do
+    events =
+      Enum.map(events, fn
+        %{"payload" => payload} = event when is_map(payload) ->
+          Map.put(event, "payload", Map.drop(payload, @participant_detail_keys))
+
+        event ->
+          event
+      end)
+
+    Map.put(frame, "events", events)
+  end
+
+  defp participant_details_projection(frame, _state), do: frame
+
+  @doc "The coarse device: derived from the declared kind when there is one, else from the User-Agent."
+  def device_type(kind, agent), do: DeviceKind.device_type(kind) || user_agent_device_type(agent)
+
+  defp user_agent_device_type(nil), do: nil
+
+  defp user_agent_device_type(agent) do
     cond do
       String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
       String.contains?(agent, ["Mobile", "iPhone"]) -> "phone"

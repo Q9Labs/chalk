@@ -264,6 +264,24 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getPresentingFormats", "/v1/presenting/formats", {
+      success: S.GetPresentingFormatsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PresentingInvalidRequestErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.PresentingDocumentNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingPageNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.PresentingDocumentNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingZoomNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.PresentingUnsupportedTypeErrorSchema.pipe(HttpApiSchema.status(422)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.PresentingRendererUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getProblemReportAvailability", "/v1/tenants/:tenant_id/problem-reports/availability", {
       params: S.GetProblemReportAvailabilityPathParamsSchema,
       success: S.GetProblemReportAvailabilityResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -884,10 +902,13 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.IdentityKindForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ParticipantDescriptionForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.IdentityKindConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
@@ -1688,6 +1709,48 @@ const spacesGroup = HttpApiGroup.make("spaces")
 
 const tenantsGroup = HttpApiGroup.make("tenants")
   .add(
+    HttpApiEndpoint.post("acceptTenantHandover", "/v1/tenant-handovers/:handover_id/acceptance", {
+      params: S.AcceptTenantHandoverPathParamsSchema,
+      payload: S.AcceptTenantHandoverRequestBodySchema,
+      success: S.AcceptTenantHandoverResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantHandoverInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantHandoverInvalidRecipientEmailErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverRecipientMismatchErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TenantHandoverAlreadyAcceptedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.TenantHandoverCanceledErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.TenantHandoverExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.TenantHandoverOwnershipChangedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("cancelTenantHandover", "/v1/tenants/:tenant_id/handovers/:handover_id/cancellation", {
+      params: S.CancelTenantHandoverPathParamsSchema,
+      success: S.CancelTenantHandoverResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantHandoverInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TenantHandoverAlreadyAcceptedErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.TenantHandoverExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createTenant", "/v1/tenants", {
       payload: S.CreateTenantRequestBodySchema,
       success: S.CreateTenantResponseSchema.pipe(HttpApiSchema.status(201)),
@@ -1699,6 +1762,29 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.TenantMediaPlaneNotPermittedErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("createTenantHandover", "/v1/tenants/:tenant_id/handovers", {
+      params: S.CreateTenantHandoverPathParamsSchema,
+      headers: S.CreateTenantHandoverRequestHeadersSchema,
+      payload: S.CreateTenantHandoverRequestBodySchema,
+      success: S.CreateTenantHandoverResponseSchema.pipe(HttpApiSchema.status(201)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantHandoverInvalidExpiryErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantHandoverInvalidRecipientEmailErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.TenantHandoverAlreadyPendingErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
@@ -1722,6 +1808,21 @@ const tenantsGroup = HttpApiGroup.make("tenants")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getLatestAcceptedTenantHandover", "/v1/tenant-handovers/accepted/latest", {
+      query: S.GetLatestAcceptedTenantHandoverQueryParamsSchema,
+      success: S.GetLatestAcceptedTenantHandoverResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantHandoverInvalidRecipientEmailErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getTenant", "/v1/tenants/:tenant_id", {
       params: S.GetTenantPathParamsSchema,
       success: S.GetTenantResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1730,6 +1831,37 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getTenantHandover", "/v1/tenants/:tenant_id/handovers/:handover_id", {
+      params: S.GetTenantHandoverPathParamsSchema,
+      success: S.GetTenantHandoverResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantHandoverInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getTenantHandoverAcceptance", "/v1/tenant-handovers/:handover_id", {
+      params: S.GetTenantHandoverAcceptancePathParamsSchema,
+      success: S.GetTenantHandoverAcceptanceResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantHandoverInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantHandoverNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),

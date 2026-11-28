@@ -324,6 +324,17 @@
           "maxBytes": 64,
           "trimmedNonEmpty": true
         },
+        "identityKind": {
+          "kind": "string",
+          "enum": ["user", "agent", "guest"],
+          "optional": true
+        },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
+          "optional": true
+        },
         "capabilities": {
           "kind": "array",
           "maxItems": 23,
@@ -424,6 +435,12 @@
       "wireName": "entry_confirmation",
       "optional": true,
       "value": true
+    },
+    "participantDetails": {
+      "wireName": "participant_details",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated participant_details=1: this Sync sends immutable participant detail fields on participant frames. A client that does not see it must not rely on them."
     },
     "mediaOffReason": {
       "wireName": "media_off_reason",
@@ -837,7 +854,9 @@
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "application/vnd.oasis.opendocument.text",
       "application/vnd.oasis.opendocument.spreadsheet",
-      "application/vnd.oasis.opendocument.presentation"
+      "application/vnd.oasis.opendocument.presentation",
+      "application/vnd.apple.keynote",
+      "application/x-iwork-keynote-sffkey"
     ],
     "chatCursor": {
       "exactFields": ["after_sequence", "retained_floor_sequence"],
@@ -962,6 +981,17 @@
           "minBytes": 1,
           "maxBytes": 64,
           "trimmedNonEmpty": true
+        },
+        "identityKind": {
+          "kind": "string",
+          "enum": ["user", "agent", "guest"],
+          "optional": true
+        },
+        "description": {
+          "kind": "string",
+          "minBytes": 1,
+          "maxBytes": 320,
+          "optional": true
         },
         "admissionRevision": {
           "kind": "integer",
@@ -1203,11 +1233,13 @@
         "kind": "array",
         "maxItems": 500,
         "exactFields": ["participant_id", "state", "speaking", "active_speaker"],
-        "optionalFields": ["identity_id", "device_type", "admission_revision", "connection_quality"],
+        "optionalFields": ["identity_id", "device_type", "device_kind", "admission_revision", "connection_quality"],
         "connectionQuality": ["good", "weak", "poor"],
         "identityId": "uuid",
         "deviceType": ["phone", "tablet", "computer"],
+        "deviceKind": ["iphone", "ipad", "android_phone", "android_tablet", "android_foldable", "mac", "windows", "linux", "chromeos"],
         "negotiation": "participant_devices=1 WebSocket query opts into identity and coarse device hints; omitted for older clients",
+        "deviceKindNegotiation": "participant_device_kinds=1 WebSocket query, together with participant_devices=1, opts into device_kind, the device each person declared with the device_kind query (an unknown value is ignored); omitted when nothing was declared and for older clients",
         "connectionQualityNegotiation": "connection_quality=1 WebSocket query opts into connection_quality, the quality this person reported for their own link; omitted when nothing was reported and for older clients",
         "participantId": "uuid",
         "state": ["connected", "disconnected"],

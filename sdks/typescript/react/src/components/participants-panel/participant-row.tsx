@@ -5,7 +5,7 @@ import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { Crown01Icon } from "../../utils/icons";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { preloadable } from "../../internal/preloadable";
-import { Avatar } from "../atomic";
+import { AIBadge, Avatar } from "../atomic";
 import { useNarrowCall } from "../../internal/call-width";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
@@ -73,7 +73,7 @@ export function ParticipantRow({
   const narrowWindow = useIsMobile();
   const phone = narrowCall || narrowWindow;
   const [before, match, after] = splitMatch(participant.displayName, query);
-  const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? "Sharing screen" : participant.deviceHint;
+  const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? ["Sharing screen", participant.deviceHint].filter(Boolean).join(" · ") : participant.deviceHint;
   const menu = (header?: ReactNode) => (
     <Suspense fallback={null}>
       <ParticipantOptionsMenu
@@ -140,6 +140,7 @@ export function ParticipantRow({
               </bdi>
             </button>
           )}
+          {participant.identityKind === "agent" && !isEditing ? <AIBadge /> : null}
           {participant.isLocal && !isEditing ? <span className="call-person-you">(You)</span> : null}
           {participant.isHost && !isEditing ? (
             <span className="call-person-host" role="img" aria-label="Host" title="Host">
@@ -148,6 +149,7 @@ export function ParticipantRow({
           ) : null}
         </div>
         {subLine ? <div className="call-person-sub">{subLine}</div> : null}
+        {participant.description ? <div className="call-person-sub">{participant.description}</div> : null}
       </div>
 
       <PersonStateSlots participant={participant} handNumber={handNumber} />

@@ -8,6 +8,21 @@ An Agent is the identity kind in [GLOSSARY.md](../GLOSSARY.md): a full peer of a
 User with the same lifecycle and media rights. Bot, Assistant and AI are not
 domain nouns.
 
+## Admission identity kind
+
+Admission accepts `identity_kind` as `user` or `agent`, defaulting to `user`.
+Only a trusted backend credential can set it to `agent`: a service principal or
+a Tenant API key. A browser/session credential that sends `agent` is rejected
+with `identity.kind_forbidden`. Display names and client media or Sync
+connections cannot change it. An agent admission must use an external identity
+(`identity_external_id`) so the person or service represented by the Agent
+remains tenant-scoped and idempotent.
+
+Re-admitting the same external identity with the same kind keeps the normal
+idempotent admission semantics. Re-admitting it with a different kind is
+rejected with `identity.kind_conflict`; create a distinct external identity
+instead of changing what an existing identity is.
+
 ## Why not the recorder
 
 The recorder (`apps/api/cmd/recorder-capture`) only pulls tracks. The capture

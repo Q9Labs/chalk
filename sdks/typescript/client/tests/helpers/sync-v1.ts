@@ -121,6 +121,8 @@ export async function wireSnapshot(initial: V1ControlState): Promise<Snapshot> {
       admission_revision: participant.admissionRevision,
       role: participant.role,
       capabilities: participant.capabilities,
+      ...(participant.identityKind === undefined ? {} : { identity_kind: participant.identityKind }),
+      ...(participant.description === undefined ? {} : { description: participant.description }),
     })),
     admission_requests: state.admissionRequests.map((request) => ({ admission_request_id: request.admissionRequestId, participant_id: request.participantId, display_name: request.displayName, role: request.initialRole, expires_at_ms: request.expiresAtMs })),
   };

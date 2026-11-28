@@ -3,6 +3,7 @@
 import { Schema, SchemaGetter } from "effect";
 
 export const ChalkCodePointLimits = {
+  "AdmitEpisodeParticipantRequest.description": 80,
   "CreateSpaceRequest.name": 120,
   "CreateTenantRequest.external_id": 512,
   "ProblemReportRequest.description": 1000,
@@ -81,6 +82,13 @@ export const APIKeyWithSecretSchema = /* @__PURE__ */ (() =>
   }))();
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
 
+export const AcceptTenantHandoverRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recipient_email: Schema.String.check(Schema.isMinLength(1)),
+    recipient_name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  }))();
+export type AcceptTenantHandoverRequest = typeof AcceptTenantHandoverRequestSchema.Type;
+
 export const EpisodeIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId")))();
 export type EpisodeId = typeof EpisodeIdSchema.Type;
 
@@ -124,8 +132,10 @@ export type AccessGrant = typeof AccessGrantSchema.Type;
 export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     admission: Schema.optional(Schema.Literals(["policy", "direct"])),
+    description: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 80))),
     identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
     identity_id: Schema.optional(UUIDSchema),
+    identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.String.check(Schema.isMinLength(1)),
     participant_id: Schema.optional(ParticipantIdSchema),
@@ -465,6 +475,13 @@ export const CreateSpaceRequestSchema = /* @__PURE__ */ (() =>
     transcription_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   }))();
 export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
+
+export const CreateTenantHandoverRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_in_seconds: Schema.optional(Schema.Number),
+    recipient_email: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type CreateTenantHandoverRequest = typeof CreateTenantHandoverRequestSchema.Type;
 
 export const MediaPlaneProviderConfigSchema = /* @__PURE__ */ (() =>
   Schema.StructWithRest(
@@ -928,6 +945,7 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
     ),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: ParticipantIdSchema,
@@ -955,6 +973,7 @@ export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
     }),
     participant: Schema.Struct({
       capabilities: Schema.Array(Schema.String),
+      description: Schema.optional(Schema.NullOr(Schema.String)),
       episode_id: EpisodeIdSchema,
       generation: Schema.Number,
       id: UUIDSchema,
@@ -1015,6 +1034,12 @@ export const PresentingDocumentPageZoomSchema = /* @__PURE__ */ (() =>
     imageUrl: Schema.String,
   }))();
 export type PresentingDocumentPageZoom = typeof PresentingDocumentPageZoomSchema.Type;
+
+export const PresentingFormatsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    formats: Schema.Array(Schema.String),
+  }))();
+export type PresentingFormats = typeof PresentingFormatsSchema.Type;
 
 export const ProblemReportAvailabilitySchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -1871,6 +1896,35 @@ export const TenantSchema = /* @__PURE__ */ (() =>
   }))();
 export type Tenant = typeof TenantSchema.Type;
 
+export const TenantHandoverSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    accepted_at: Schema.NullOr(DateTimeStringSchema),
+    accepted_by_user_id: Schema.NullOr(UserIdSchema),
+    canceled_at: Schema.NullOr(DateTimeStringSchema),
+    canceled_by: Schema.NullOr(
+      Schema.Struct({
+        kind: Schema.String,
+        operator: Schema.optional(Schema.String),
+        service_id: Schema.optional(Schema.String),
+      }),
+    ),
+    created_at: DateTimeStringSchema,
+    expires_at: DateTimeStringSchema,
+    from_service_id: Schema.String,
+    id: UUIDSchema,
+    initiated_by: Schema.Struct({
+      kind: Schema.String,
+      operator: Schema.optional(Schema.String),
+      service_id: Schema.optional(Schema.String),
+    }),
+    recipient_email: Schema.String,
+    status: Schema.String,
+    tenant_id: TenantIdSchema,
+    to_service_id: Schema.String,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type TenantHandover = typeof TenantHandoverSchema.Type;
+
 export const TenantListSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     pagination: PaginationSchema,
@@ -2524,6 +2578,26 @@ export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Typ
 export const RetryAfterHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)))();
 export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
 
+export const AcceptTenantHandoverPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    handover_id: UUIDSchema,
+  }))();
+export type AcceptTenantHandoverPathParams = typeof AcceptTenantHandoverPathParamsSchema.Type;
+
+export const AcceptTenantHandoverRequestBodySchema = /* @__PURE__ */ (() => AcceptTenantHandoverRequestSchema)();
+export type AcceptTenantHandoverRequestBody = typeof AcceptTenantHandoverRequestBodySchema.Type;
+
+export const AcceptTenantHandoverResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type AcceptTenantHandoverResponse = typeof AcceptTenantHandoverResponseSchema.Type;
+
+export const AcceptTenantHandover429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type AcceptTenantHandover429ResponseHeaders = typeof AcceptTenantHandover429ResponseHeadersSchema.Type;
+
 export const AdmitEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
@@ -2706,6 +2780,24 @@ export const CancelSpaceRecordingPreparation429ResponseHeadersSchema = /* @__PUR
   }))();
 export type CancelSpaceRecordingPreparation429ResponseHeaders = typeof CancelSpaceRecordingPreparation429ResponseHeadersSchema.Type;
 
+export const CancelTenantHandoverPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    handover_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CancelTenantHandoverPathParams = typeof CancelTenantHandoverPathParamsSchema.Type;
+
+export const CancelTenantHandoverResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type CancelTenantHandoverResponse = typeof CancelTenantHandoverResponseSchema.Type;
+
+export const CancelTenantHandover429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CancelTenantHandover429ResponseHeaders = typeof CancelTenantHandover429ResponseHeadersSchema.Type;
+
 export const CreateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     tenant_id: TenantIdSchema,
@@ -2875,6 +2967,32 @@ export const CreateTenant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type CreateTenant429ResponseHeaders = typeof CreateTenant429ResponseHeadersSchema.Type;
+
+export const CreateTenantHandoverPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateTenantHandoverPathParams = typeof CreateTenantHandoverPathParamsSchema.Type;
+
+export const CreateTenantHandoverRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreateTenantHandoverRequestHeaders = typeof CreateTenantHandoverRequestHeadersSchema.Type;
+
+export const CreateTenantHandoverRequestBodySchema = /* @__PURE__ */ (() => CreateTenantHandoverRequestSchema)();
+export type CreateTenantHandoverRequestBody = typeof CreateTenantHandoverRequestBodySchema.Type;
+
+export const CreateTenantHandoverResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type CreateTenantHandoverResponse = typeof CreateTenantHandoverResponseSchema.Type;
+
+export const CreateTenantHandover429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateTenantHandover429ResponseHeaders = typeof CreateTenantHandover429ResponseHeadersSchema.Type;
 
 export const CreateTranscriptDownloadURLPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3134,6 +3252,23 @@ export const GetEpisodeTalkTime429ResponseHeadersSchema = /* @__PURE__ */ (() =>
   }))();
 export type GetEpisodeTalkTime429ResponseHeaders = typeof GetEpisodeTalkTime429ResponseHeadersSchema.Type;
 
+export const GetLatestAcceptedTenantHandoverQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recipient_email: Schema.String,
+  }))();
+export type GetLatestAcceptedTenantHandoverQueryParams = typeof GetLatestAcceptedTenantHandoverQueryParamsSchema.Type;
+
+export const GetLatestAcceptedTenantHandoverResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type GetLatestAcceptedTenantHandoverResponse = typeof GetLatestAcceptedTenantHandoverResponseSchema.Type;
+
+export const GetLatestAcceptedTenantHandover429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetLatestAcceptedTenantHandover429ResponseHeaders = typeof GetLatestAcceptedTenantHandover429ResponseHeadersSchema.Type;
+
 export const GetParticipantEpisodeStatusPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
@@ -3188,6 +3323,17 @@ export const GetPresentingDocumentPageZoom429ResponseHeadersSchema = /* @__PURE_
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetPresentingDocumentPageZoom429ResponseHeaders = typeof GetPresentingDocumentPageZoom429ResponseHeadersSchema.Type;
+
+export const GetPresentingFormatsResponseSchema = /* @__PURE__ */ (() => PresentingFormatsSchema)();
+export type GetPresentingFormatsResponse = typeof GetPresentingFormatsResponseSchema.Type;
+
+export const GetPresentingFormats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetPresentingFormats429ResponseHeaders = typeof GetPresentingFormats429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3308,6 +3454,41 @@ export const GetTenant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetTenant429ResponseHeaders = typeof GetTenant429ResponseHeadersSchema.Type;
+
+export const GetTenantHandoverPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    handover_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetTenantHandoverPathParams = typeof GetTenantHandoverPathParamsSchema.Type;
+
+export const GetTenantHandoverResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type GetTenantHandoverResponse = typeof GetTenantHandoverResponseSchema.Type;
+
+export const GetTenantHandover429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetTenantHandover429ResponseHeaders = typeof GetTenantHandover429ResponseHeadersSchema.Type;
+
+export const GetTenantHandoverAcceptancePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    handover_id: UUIDSchema,
+  }))();
+export type GetTenantHandoverAcceptancePathParams = typeof GetTenantHandoverAcceptancePathParamsSchema.Type;
+
+export const GetTenantHandoverAcceptanceResponseSchema = /* @__PURE__ */ (() => TenantHandoverSchema)();
+export type GetTenantHandoverAcceptanceResponse = typeof GetTenantHandoverAcceptanceResponseSchema.Type;
+
+export const GetTenantHandoverAcceptance429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetTenantHandoverAcceptance429ResponseHeaders = typeof GetTenantHandoverAcceptance429ResponseHeadersSchema.Type;
 
 export const GetTranscriptPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4950,6 +5131,44 @@ export const EpisodeNotFoundErrorSchema = EpisodeNotFoundErrorWireSchema.pipe(
   }),
 );
 
+export class IdentityKindConflictError extends Schema.TaggedErrorClass<IdentityKindConflictError>()("IdentityKindConflictError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindConflictErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_conflict"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindConflictErrorSchema = IdentityKindConflictErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindConflictError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindConflictError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class IdentityKindForbiddenError extends Schema.TaggedErrorClass<IdentityKindForbiddenError>()("IdentityKindForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const IdentityKindForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("identity.kind_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const IdentityKindForbiddenErrorSchema = IdentityKindForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(IdentityKindForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityKindForbiddenError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class McpOauthConnectionNotFoundError extends Schema.TaggedErrorClass<McpOauthConnectionNotFoundError>()("McpOauthConnectionNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("mcp_oauth.connection_not_found"),
@@ -5440,6 +5659,25 @@ export const ParticipantConnectionSupersededErrorWireSchema = Schema.Struct({
 export const ParticipantConnectionSupersededErrorSchema = ParticipantConnectionSupersededErrorWireSchema.pipe(
   Schema.decodeTo(ParticipantConnectionSupersededError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantConnectionSupersededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantDescriptionForbiddenError extends Schema.TaggedErrorClass<ParticipantDescriptionForbiddenError>()("ParticipantDescriptionForbiddenError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantDescriptionForbiddenErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.description_forbidden"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantDescriptionForbiddenErrorSchema = ParticipantDescriptionForbiddenErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantDescriptionForbiddenError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantDescriptionForbiddenError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6375,6 +6613,196 @@ export const TenantArtifactPolicyConflictErrorSchema = TenantArtifactPolicyConfl
   }),
 );
 
+export class TenantHandoverAlreadyAcceptedError extends Schema.TaggedErrorClass<TenantHandoverAlreadyAcceptedError>()("TenantHandoverAlreadyAcceptedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.already_accepted"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverAlreadyAcceptedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.already_accepted"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverAlreadyAcceptedErrorSchema = TenantHandoverAlreadyAcceptedErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverAlreadyAcceptedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverAlreadyAcceptedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverAlreadyPendingError extends Schema.TaggedErrorClass<TenantHandoverAlreadyPendingError>()("TenantHandoverAlreadyPendingError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.already_pending"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverAlreadyPendingErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.already_pending"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverAlreadyPendingErrorSchema = TenantHandoverAlreadyPendingErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverAlreadyPendingError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverAlreadyPendingError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverCanceledError extends Schema.TaggedErrorClass<TenantHandoverCanceledError>()("TenantHandoverCanceledError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.canceled"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverCanceledErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.canceled"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverCanceledErrorSchema = TenantHandoverCanceledErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverCanceledError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverCanceledError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverExpiredError extends Schema.TaggedErrorClass<TenantHandoverExpiredError>()("TenantHandoverExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.expired"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverExpiredErrorSchema = TenantHandoverExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverInvalidExpiryError extends Schema.TaggedErrorClass<TenantHandoverInvalidExpiryError>()("TenantHandoverInvalidExpiryError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_expiry"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverInvalidExpiryErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_expiry"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverInvalidExpiryErrorSchema = TenantHandoverInvalidExpiryErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverInvalidExpiryError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverInvalidExpiryError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverInvalidIdError extends Schema.TaggedErrorClass<TenantHandoverInvalidIdError>()("TenantHandoverInvalidIdError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_id"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverInvalidIdErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_id"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverInvalidIdErrorSchema = TenantHandoverInvalidIdErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverInvalidIdError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverInvalidIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverInvalidRecipientEmailError extends Schema.TaggedErrorClass<TenantHandoverInvalidRecipientEmailError>()("TenantHandoverInvalidRecipientEmailError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_recipient_email"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverInvalidRecipientEmailErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.invalid_recipient_email"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverInvalidRecipientEmailErrorSchema = TenantHandoverInvalidRecipientEmailErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverInvalidRecipientEmailError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverInvalidRecipientEmailError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverNotFoundError extends Schema.TaggedErrorClass<TenantHandoverNotFoundError>()("TenantHandoverNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.not_found"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverNotFoundErrorSchema = TenantHandoverNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverOwnershipChangedError extends Schema.TaggedErrorClass<TenantHandoverOwnershipChangedError>()("TenantHandoverOwnershipChangedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.ownership_changed"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverOwnershipChangedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.ownership_changed"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverOwnershipChangedErrorSchema = TenantHandoverOwnershipChangedErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverOwnershipChangedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverOwnershipChangedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantHandoverRecipientMismatchError extends Schema.TaggedErrorClass<TenantHandoverRecipientMismatchError>()("TenantHandoverRecipientMismatchError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.recipient_mismatch"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantHandoverRecipientMismatchErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant_handover.recipient_mismatch"),
+    message: Schema.String,
+  }),
+});
+export const TenantHandoverRecipientMismatchErrorSchema = TenantHandoverRecipientMismatchErrorWireSchema.pipe(
+  Schema.decodeTo(TenantHandoverRecipientMismatchError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantHandoverRecipientMismatchError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class TenantInvalidArtifactPolicyError extends Schema.TaggedErrorClass<TenantInvalidArtifactPolicyError>()("TenantInvalidArtifactPolicyError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.invalid_artifact_policy"),
@@ -7078,6 +7506,25 @@ export const WhiteboardStorageUnavailableErrorSchema = WhiteboardStorageUnavaila
   }),
 );
 
+export const AcceptTenantHandoverErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantHandoverAlreadyAcceptedErrorSchema,
+  TenantHandoverCanceledErrorSchema,
+  TenantHandoverExpiredErrorSchema,
+  TenantHandoverInvalidIdErrorSchema,
+  TenantHandoverInvalidRecipientEmailErrorSchema,
+  TenantHandoverNotFoundErrorSchema,
+  TenantHandoverOwnershipChangedErrorSchema,
+  TenantHandoverRecipientMismatchErrorSchema,
+]);
+export type AcceptTenantHandoverError = typeof AcceptTenantHandoverErrorSchema.Type;
+
 export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7085,8 +7532,11 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
+  IdentityKindConflictErrorSchema,
+  IdentityKindForbiddenErrorSchema,
   MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
+  ParticipantDescriptionForbiddenErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
@@ -7196,6 +7646,20 @@ export const CancelSpaceRecordingPreparationErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type CancelSpaceRecordingPreparationError = typeof CancelSpaceRecordingPreparationErrorSchema.Type;
+
+export const CancelTenantHandoverErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantHandoverAlreadyAcceptedErrorSchema,
+  TenantHandoverExpiredErrorSchema,
+  TenantHandoverInvalidIdErrorSchema,
+  TenantHandoverNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type CancelTenantHandoverError = typeof CancelTenantHandoverErrorSchema.Type;
 
 export const CreateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7333,6 +7797,23 @@ export const CreateTenantErrorSchema = Schema.Union([
   TenantMediaPlaneNotPermittedErrorSchema,
 ]);
 export type CreateTenantError = typeof CreateTenantErrorSchema.Type;
+
+export const CreateTenantHandoverErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestIdempotencyConflictErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestInvalidIdempotencyKeyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantHandoverAlreadyPendingErrorSchema,
+  TenantHandoverInvalidExpiryErrorSchema,
+  TenantHandoverInvalidRecipientEmailErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type CreateTenantHandoverError = typeof CreateTenantHandoverErrorSchema.Type;
 
 export const CreateTranscriptDownloadURLErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7544,6 +8025,17 @@ export const GetEpisodeTalkTimeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeTalkTimeError = typeof GetEpisodeTalkTimeErrorSchema.Type;
 
+export const GetLatestAcceptedTenantHandoverErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantHandoverInvalidRecipientEmailErrorSchema,
+  TenantHandoverNotFoundErrorSchema,
+]);
+export type GetLatestAcceptedTenantHandoverError = typeof GetLatestAcceptedTenantHandoverErrorSchema.Type;
+
 export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7587,6 +8079,21 @@ export const GetPresentingDocumentPageZoomErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type GetPresentingDocumentPageZoomError = typeof GetPresentingDocumentPageZoomErrorSchema.Type;
+
+export const GetPresentingFormatsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PresentingDocumentNotFoundErrorSchema,
+  PresentingDocumentNotReadyErrorSchema,
+  PresentingInvalidRequestErrorSchema,
+  PresentingPageNotFoundErrorSchema,
+  PresentingRendererUnavailableErrorSchema,
+  PresentingUnsupportedTypeErrorSchema,
+  PresentingZoomNotReadyErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceUnavailableErrorSchema,
+]);
+export type GetPresentingFormatsError = typeof GetPresentingFormatsErrorSchema.Type;
 
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
@@ -7663,6 +8170,21 @@ export type GetSpaceRecordingPreparationError = typeof GetSpaceRecordingPreparat
 
 export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
+
+export const GetTenantHandoverAcceptanceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantHandoverInvalidIdErrorSchema, TenantHandoverNotFoundErrorSchema]);
+export type GetTenantHandoverAcceptanceError = typeof GetTenantHandoverAcceptanceErrorSchema.Type;
+
+export const GetTenantHandoverErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantHandoverInvalidIdErrorSchema,
+  TenantHandoverNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetTenantHandoverError = typeof GetTenantHandoverErrorSchema.Type;
 
 export const GetTranscriptDocumentErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -8425,6 +8947,7 @@ export const UploadTelemetryErrorSchema = Schema.Union([
 export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
 
 export const ChalkOperationPolicies = {
+  acceptTenantHandover: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveScreenAnnotationHelperDeviceCode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8434,6 +8957,7 @@ export const ChalkOperationPolicies = {
   cancelEpisodeParticipantJoin: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelScheduledEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  cancelTenantHandover: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8442,6 +8966,7 @@ export const ChalkOperationPolicies = {
   createRecordingDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  createTenantHandover: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8455,11 +8980,14 @@ export const ChalkOperationPolicies = {
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeTalkTime: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getLatestAcceptedTenantHandover: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getScheduledEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getTenantHandover: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getTenantHandoverAcceptance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

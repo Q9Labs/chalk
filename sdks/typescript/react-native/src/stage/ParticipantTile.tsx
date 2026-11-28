@@ -1,4 +1,4 @@
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { participantDevice, type ParticipantDevice, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSharedValue, withTiming } from "react-native-reanimated";
@@ -34,12 +34,14 @@ export type ParticipantTileProps = {
 
 type TileModel = {
   readonly name: string;
+  readonly agent: boolean;
   readonly isSelf: boolean;
   readonly muted: boolean;
   readonly handRaised: boolean;
   readonly speaking: boolean;
   readonly track: MediaStreamTrack | null;
   readonly back: boolean;
+  readonly device: ParticipantDevice | undefined;
 };
 
 /** Below this width your own tile reads "You", because "<name> (You)" leaves no room for the name. */
@@ -53,12 +55,14 @@ function selectTile(id: string) {
     const track = isSelf ? (local.camera.state === "enabled" ? local.camera.track : null) : participant?.media.camera === "active" ? (remote.find((media) => media.participantId === id && media.source === "camera")?.track ?? null) : null;
     return {
       name: participant?.displayName ?? snapshot.self.displayName ?? "",
+      agent: participant?.identityKind === "agent",
       isSelf,
       muted: isSelf ? local.microphone.state !== "enabled" : participant?.media.microphone !== "active",
       handRaised: isSelf ? snapshot.self.handRaised : (participant?.handRaised ?? false),
       speaking: participant?.presence.speaking ?? false,
       track,
       back: isSelf && cameraFacing(snapshot.media) === "back",
+      device: participantDevice(participant),
     };
   };
 }
@@ -91,11 +95,11 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
     <TileShell selected={following} cameraOn={video !== null} level={level} speaking={tile.speaking} testID={`tile.${id}`}>
       {video ?? (
         <View style={styles.center}>
-          <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
+          <FaceAvatar level={level} lookAround name={tile.name} showAIBadge={tile.agent} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
+      <NameTag agent={tile.agent} device={tile.device} following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );

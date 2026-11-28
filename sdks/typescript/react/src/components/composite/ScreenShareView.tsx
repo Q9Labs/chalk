@@ -5,6 +5,7 @@ import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-cli
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
+import { AIBadge } from "../atomic/AIBadge";
 import { ChalkButton } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -23,6 +24,7 @@ export interface ScreenShareViewProps {
 }
 export interface ScreenSharePresentationProps extends ScreenShareViewProps {
   readonly sharedByName: string;
+  readonly sharedByAgent?: boolean;
   readonly media: React.ReactNode;
   readonly mediaVisible: boolean;
   readonly state?: ScreenShareState;
@@ -52,6 +54,7 @@ export interface ScreenShareViewSurfaceProps extends Omit<ScreenSharePresentatio
 /** Stable media layer: connecting/paused chrome never removes the video or its last decoded frame. */
 export function ScreenSharePresentation({
   sharedByName,
+  sharedByAgent = false,
   media,
   mediaVisible,
   state,
@@ -132,7 +135,7 @@ export function ScreenSharePresentation({
       style={style}
       className={cn("h-full w-full", className)}
       // The own-share bar already names a big local share, so its tag would only repeat it and crowd Stop sharing.
-      chip={ownBigShare ? null : <ShareChip name={name} withAudio={!isLocal && hasAudio} />}
+      chip={ownBigShare ? null : <ShareChip agent={sharedByAgent} name={name} withAudio={!isLocal && hasAudio} />}
     >
       <div
         ref={root}
@@ -262,6 +265,7 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
       annotationContext={self.participantId ? { actorId: self.participantId, actorName: self.displayName ?? "You" } : undefined}
       screenShareTrack={active.screenShareTrack}
       sharedByName={active.displayName}
+      sharedByAgent={active.identityKind === "agent"}
       isLocal={active.isLocal}
       hasAudio={active.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === active.id)?.media.screenShareHasAudio}
       capture={active.isLocal ? media.screenShare.capture : undefined}
@@ -283,13 +287,14 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
   );
 }
 
-function ShareChip({ name, withAudio }: { readonly name: string; readonly withAudio: boolean }) {
+function ShareChip({ name, agent, withAudio }: { readonly name: string; readonly agent: boolean; readonly withAudio: boolean }) {
   return (
     <>
       <StageIcon name="share" size={14} className="shrink-0" />
       <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
         {name}
       </span>
+      {agent ? <AIBadge /> : null}
       {withAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
     </>
   );

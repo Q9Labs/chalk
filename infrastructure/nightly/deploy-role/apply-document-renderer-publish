@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Puts the inline policy that lets the nightly deploy role publish document-renderer ZIPs to the Nightly artifacts
-# bucket, or with --check compares the role's live policy with this file and exits 1 on drift.
+# Puts the inline policies that let the nightly deploy role publish document-renderer ZIPs to the Nightly artifacts
+# bucket and document-renderer container images to the renderer ECR repository, or with --check compares each live
+# policy with its file and exits 1 on drift.
 #
-#   AWS_PROFILE=<admin profile> apply-document-renderer-publish [--check]
+#   AWS_PROFILE=<admin profile> AWS_REGION=<region> apply-document-renderer-publish [--check]
 #
-# The role's other inline policies are not managed here. The nightly media build needs this one because it publishes the
-# renderer ZIP that Promote later reuses (docs/managed-release.md, "Environment setup").
+# The role's other inline policies are not managed here. The nightly media build needs these because it publishes the
+# renderer ZIP and image that Promote later reuses (docs/managed-release.md, "Environment setup").
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 role=chalk-nightly-github-deploy
-policy_name=chalk-nightly-document-renderer-publish
+policies=(
+  "chalk-nightly-document-renderer-publish:document-renderer-publish.policy.json"
+  "chalk-nightly-document-renderer-image-publish:document-renderer-image.policy.json"
+)
 mode=apply
 case "${1:-}" in
   "") ;;
@@ -19,18 +23,24 @@ case "${1:-}" in
 esac
 
 account="$(aws sts get-caller-identity --query Account --output text)"
-desired="$(sed "s/__ACCOUNT__/$account/g" "$here/document-renderer-publish.policy.json" | jq -S .)"
-
-if [ "$mode" = apply ]; then
-  aws iam put-role-policy --role-name "$role" --policy-name "$policy_name" --policy-document "$desired"
-  echo "applied $policy_name to $role"
-  exit 0
-fi
-
-live="$(aws iam get-role-policy --role-name "$role" --policy-name "$policy_name" --query PolicyDocument --output json | jq -S .)"
-if [ "$live" != "$desired" ]; then
-  echo "drift: $policy_name on $role differs from document-renderer-publish.policy.json" >&2
-  diff <(printf '%s\n' "$desired") <(printf '%s\n' "$live") >&2 || true
-  exit 1
-fi
-echo "ok: $policy_name on $role matches"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region)}}"
+status=0
+for entry in "${policies[@]}"; do
+  policy_name="${entry%%:*}"
+  file="${entry#*:}"
+  desired="$(sed -e "s/__ACCOUNT__/$account/g" -e "s/__REGION__/$region/g" "$here/$file" | jq -S .)"
+  if [ "$mode" = apply ]; then
+    aws iam put-role-policy --role-name "$role" --policy-name "$policy_name" --policy-document "$desired"
+    echo "applied $policy_name to $role"
+    continue
+  fi
+  live="$(aws iam get-role-policy --role-name "$role" --policy-name "$policy_name" --query PolicyDocument --output json | jq -S .)"
+  if [ "$live" != "$desired" ]; then
+    echo "drift: $policy_name on $role differs from $file" >&2
+    diff <(printf '%s\n' "$desired") <(printf '%s\n' "$live") >&2 || true
+    status=1
+    continue
+  fi
+  echo "ok: $policy_name on $role matches"
+done
+exit "$status"

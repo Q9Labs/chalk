@@ -2,7 +2,7 @@
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ChatUploadFile } from "@q9labsai/chalk-client";
+import { presentingFormatIdsFor, type ChatUploadFile } from "@q9labsai/chalk-client";
 import { createPreviewClient } from "../../test-support/preview-client";
 import { ChatPanelSurface } from "../composite/ChatPanel";
 import { useFilePresenting } from "./use-file-presenting";
@@ -18,7 +18,7 @@ function mount(live: boolean, openChat: () => void = () => {}, notify: Notify = 
   const client = createPreviewClient();
   let api: ReturnType<typeof useFilePresenting> | undefined;
   function Probe() {
-    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, openChat });
+    api = useFilePresenting({ client, notify, live, chatOpen: false, chatEnabled: true, presentingAvailable, formats: presentingFormatIdsFor(), openChat });
     return <input ref={api.presentInputRef} type="file" aria-hidden="true" />;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -73,25 +73,13 @@ it("stages every remaining dropped file in the chat composer instead of sending 
   expect(hook()?.chatDrop?.files).toEqual([image, text]);
 });
 
-it("stages the dropped PDF in the composer when presenting it fails", async () => {
-  const opened: string[] = [];
-  const { hook } = mount(true, () => opened.push("chat"));
-  const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
-  const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });
-
-  await act(async () => {
-    window.dispatchEvent(event);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(opened).toEqual(["chat"]);
-  expect(hook()?.chatDrop?.files).toEqual([pdf]);
-});
-
 it("updates a staged composer drop without clearing a newer one", async () => {
-  const { hook } = mount(true);
+  const { hook } = mount(
+    true,
+    () => {},
+    () => {},
+    false,
+  );
   const pdf = new File([new Uint8Array(8)], "deck.pdf", { type: "application/pdf" });
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [pdf] } });

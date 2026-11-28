@@ -20,6 +20,7 @@ type sfuWindowCreateRequest struct {
 	WithDropletAgent bool     `json:"with_droplet_agent"`
 	IPv6             bool     `json:"ipv6"`
 	Backups          bool     `json:"backups"`
+	UserData         string   `json:"user_data,omitempty"`
 }
 
 func validSFUWindowName(name string) bool {

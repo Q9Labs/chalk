@@ -1,5 +1,6 @@
 import type { TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
+import type { ParticipantDeviceKind } from "./device-kind";
 import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
@@ -33,6 +34,7 @@ export const V1_CAPABILITIES = [
 export type V1Capability = (typeof V1_CAPABILITIES)[number];
 // Roles are customer-defined; the wire accepts any non-empty role name.
 export type V1Role = string;
+export type V1IdentityKind = "user" | "agent" | "guest";
 export type V1AssignableRole = string;
 export type V1AdmissionPolicy = "open" | "knock" | "members_only";
 export type V1AdmissionTarget = SetAdmissionPolicyCommandFrame["payload"]["policy"];
@@ -43,6 +45,8 @@ export type V1Participant = {
   readonly displayName: string;
   readonly handRaised: boolean;
   readonly admissionRevision: number;
+  readonly identityKind?: V1IdentityKind;
+  readonly description?: string;
   readonly role: V1Role;
   readonly eligibleRoles: readonly V1Role[];
   readonly capabilities: readonly V1Capability[];
@@ -86,6 +90,8 @@ export type V1Presence = {
   /** Stable person identity, independent of the per-device participant ID. */
   readonly identityId?: string;
   readonly deviceType?: "phone" | "tablet" | "computer";
+  /** The device that person declared, finer than `deviceType`. Absent for a client that declared nothing. */
+  readonly deviceKind?: ParticipantDeviceKind;
   readonly participantId: string;
   readonly state: "connected" | "disconnected";
   readonly speaking: boolean;
@@ -270,6 +276,8 @@ export type V1SyncClientOptions = {
   readonly maxPendingCollaborationRequests?: number;
   /** Asks Sync to hold the entry until `confirmEntered()`; set it only when the caller will call that method. */
   readonly entryConfirmation?: boolean;
+  /** The device this client runs on, shown to the other participants. Unset when the platform cannot tell. */
+  readonly deviceKind?: ParticipantDeviceKind;
 };
 export type V1Socket = SyncSocket;
 

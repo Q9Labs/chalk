@@ -1,6 +1,9 @@
+from contextlib import redirect_stdout
+import io
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import call, patch
 
 import provision
 
@@ -87,6 +90,39 @@ class MonitorDrift(unittest.TestCase):
         deployed[0]["notifierIds"] = ["n1"]
         problems = provision.monitor_drift(self.expected, deployed)
         self.assertEqual(problems, [f"{self.expected[0]['name']}: a notifier is attached", f"{self.expected[2]['name']}: missing"])
+
+    def test_configured_notifier_must_be_the_only_assignment_on_all_three_monitors(self):
+        expected = provision.monitor_definitions({"LOG_DATASET": "logs", "TRACE_DATASET": "traces"}, notifier_id="n1")
+        self.assertEqual(len(expected), 3)
+        self.assertEqual(provision.monitor_drift(expected, live(expected, ["n1"])), [])
+        self.assertEqual([monitor["notifierIds"] for monitor in expected], [["n1"]] * 3)
+        deployed = live(expected, ["n1"])
+        deployed[0]["notifierIds"] = ["n1", "unexpected"]
+        deployed[2]["notifierIds"] = []
+        self.assertEqual(provision.monitor_drift(expected, deployed), [
+            f"{expected[0]['name']}: notifierIds differs",
+            f"{expected[2]['name']}: notifierIds differs",
+        ])
+
+
+class NotifierProvision(unittest.TestCase):
+    env = {"AXIOM_TOKEN": "test", "AXIOM_ORG_ID": "test", "LOG_DATASET": "logs", "TRACE_DATASET": "traces"}
+    webhook = {"name": "Chalk alert triage", "id": "n1", "properties": {"customWebhook": {"body": "{}"}}}
+
+    def test_live_check_resolves_the_named_notifier_without_a_local_id(self):
+        monitors = provision.monitor_definitions(self.env, notifier_id="n1")
+        with patch.dict("os.environ", self.env, clear=True), patch("sys.argv", ["provision.py", "--check"]), \
+             patch.object(provision, "api", side_effect=[[self.webhook], monitors]) as api, redirect_stdout(io.StringIO()):
+            provision.main()
+        self.assertEqual(api.call_args_list, [call("GET", "/v2/notifiers"), call("GET", "/v2/monitors")])
+
+    def test_apply_refuses_missing_or_ambiguous_notifier_before_writing(self):
+        for notifiers in ([], [self.webhook, {**self.webhook, "id": "n2"}]):
+            with self.subTest(notifiers=len(notifiers)), patch.dict("os.environ", self.env, clear=True), \
+                 patch("sys.argv", ["provision.py", "--apply"]), patch.object(provision, "api", return_value=notifiers) as api:
+                with self.assertRaisesRegex(RuntimeError, "Expected exactly one Axiom notifier"):
+                    provision.main()
+                api.assert_called_once_with("GET", "/v2/notifiers")
 
 
 if __name__ == "__main__":

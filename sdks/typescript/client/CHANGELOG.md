@@ -1,8 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The server client supports Transcript listing, retrieval, and deletion, including structured documents, plain text, signed download URLs, and on-demand transcription requests.
+- Manage webhook endpoints and their revisions and secrets, list deliveries, and request redelivery with the server client.
+- Put, get, and cancel Scheduled Episodes with the server client. Participant admission now forwards `admission`, and Space updates forward `metadata` alongside artifact policies.
+
 ## 6.1.0
 
 - Let a WebRTC implementation declare that it cannot send camera simulcast; that client publishes one full-size camera stream instead.
+- Declare the device on the Sync connection (iPhone, iPad, Android phone, tablet or foldable, Mac, Windows, Linux or Chromebook) and carry each participant's device on `Participant.deviceKind`. Export `detectWebDeviceKind`, `participantDevice` and `deviceHint`. Older servers ignore the declaration and omit the field.
 - Negotiate screen annotation with Sync for the active screen publication. The client stops sending annotation commands and withdraws ink when the server disables the feature, without interrupting screen sharing.
 - Carry the HTTP status of a media signalling refusal on `connection.lastError.mediaHttpStatus`, so call screens can say the fault is Chalk's instead of the network's. Report each ICE state the media transport reaches, in order, as a `media_state` event, with the network type where the browser reports one.
 

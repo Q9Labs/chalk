@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PublishDocumentRendererImages",
+      "Effect": "Allow",
+      "Action": ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart"],
+      "Resource": "arn:aws:ecr:__REGION__:__ACCOUNT__:repository/chalk-document-renderer"
+    },
+    {
+      "Sid": "ReadDocumentRendererImageFunctions",
+      "Effect": "Allow",
+      "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration"],
+      "Resource": "arn:aws:lambda:__REGION__:__ACCOUNT__:function:chalk-*-document-renderer-image"
+    }
+  ]
+}

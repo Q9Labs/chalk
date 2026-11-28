@@ -14,6 +14,7 @@ import { JoinToast } from "./toast-fixtures";
 import { STATES_LANE } from "./states-lane";
 import { CONNECTION_STATES } from "./connection";
 import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
+import { DEVICE_STATES } from "./device-states";
 import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
 import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
@@ -110,6 +111,7 @@ export const CALL_STATES: readonly CallState[] = [
 
   { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
   { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "duo-agent", title: "Two people, agent participant", render: () => <Live snapshot={liveSnapshot({ others: [{ ...nora, agent: true }] })} /> },
   { id: "duo-grid", title: "Two people, grid", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} layout="grid" /> },
   { id: "cameras-off", title: "Two people, both cameras off", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [{ ...nora, camera: false }] })} /> },
   {
@@ -129,6 +131,7 @@ export const CALL_STATES: readonly CallState[] = [
       />
     ),
   },
+  ...DEVICE_STATES,
   { id: "group-spotlight", title: "Ten people, spotlight", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} /> },
   { id: "group-grid", title: "Ten people, grid", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} layout="grid" /> },
   { id: "crowd-grid", title: "Thirty people, grid with pages", render: () => <Live snapshot={liveSnapshot({ others: crowd(29) })} layout="grid" /> },

@@ -1,7 +1,8 @@
 import { parseAccessGrant } from "../access/grant.js";
 import { accessRefreshInput } from "./access-refresh.js";
 import { ChalkAPIError } from "./errors.js";
-import { createServerRequester } from "./transport.js";
+import type { ServerSchemas } from "./resource-types.js";
+import { createServerRequester, type ServerRequest } from "./transport.js";
 import type {
   APIKeyList,
   APIKeyWithSecret,
@@ -26,6 +27,7 @@ import type {
   SpacePublicInvite,
   SpaceList,
 } from "./types.js";
+import type { TenantHandover } from "./tenant-handover-types.js";
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
   const tenantId = required(options.tenantId, "tenantId");
@@ -38,11 +40,17 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const episodePath = (spaceId: string, episodeId: string) => `${spacePath(spaceId)}/episodes/${segment(episodeId)}`;
   const participantPath = (spaceId: string, episodeId: string, participantId: string) => `${episodePath(spaceId, episodeId)}/participants/${segment(participantId)}`;
   const recordingPath = (recordingId: string) => `${tenantPath}/recordings/${segment(recordingId)}`;
+  const transcriptPath = (transcriptId: string) => `${tenantPath}/transcripts/${segment(transcriptId)}`;
+  const scheduledEpisodePath = (spaceId: string, id: string) => `${spacePath(spaceId)}/scheduled-episodes/${segment(id)}`;
+  const webhookEndpointsPath = `${tenantPath}/webhook-endpoints`;
+  const webhookEndpointPath = (endpointId: string) => `${webhookEndpointsPath}/${segment(endpointId)}`;
   const apiKeyPath = (apiKeyId: string) => `${tenantPath}/api-keys/${segment(apiKeyId)}`;
   const admissionRequestPath = (spaceId: string, requestHandle: string) => `${spacePath(spaceId)}/public-admission-requests/${segment(requestHandle)}`;
   // Reads and idempotent writes retry on their own; `post` retries only when the caller supplies an idempotency key.
-  const send = <T>(method: "DELETE" | "GET" | "PATCH" | "POST", path: string, expectedStatus: number, body?: unknown) => request<T>({ method, path, body, expectedStatus, retry: "always" });
+  const send = <T>(method: ServerRequest["method"], path: string, expectedStatus: number, body?: unknown) => request<T>({ method, path, body, expectedStatus, retry: "always" });
   const post = <T>(path: string, expectedStatus: number, idempotency: ChalkIdempotencyOptions | undefined, body?: unknown) => request<T>({ method: "POST", path, body, expectedStatus, idempotency, retry: "caller_idempotency" });
+  const writeWebhook = <T>(method: "PATCH" | "DELETE", endpointId: string, revision: number, expectedStatus: number, idempotency: ChalkIdempotencyOptions | undefined, body?: unknown) =>
+    request<T>({ method, path: webhookEndpointPath(endpointId), body, expectedStatus, headers: { "If-Match": `"${revision}"` }, idempotency, retry: "caller_idempotency" });
   return {
     spaces: {
       archive: (spaceId) => send<Space>("POST", `${spacePath(spaceId)}/archive`, 200),
@@ -50,11 +58,22 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       get: (spaceId) => send<Space>("GET", spacePath(spaceId), 200),
       list: (input) => send<SpaceList>("GET", `${tenantPath}/spaces${query({ archived: input?.archived, cursor: input?.cursor, page_size: input?.pageSize })}`, 200),
       restore: (spaceId) => send<Space>("POST", `${spacePath(spaceId)}/restore`, 200),
-      update: (spaceId, input) => send<Space>("PATCH", spacePath(spaceId), 200, { recording_policy: input.recordingPolicy, transcription_policy: input.transcriptionPolicy }),
+      update: (spaceId, input) => send<Space>("PATCH", spacePath(spaceId), 200, { metadata: input.metadata, recording_policy: input.recordingPolicy, transcription_policy: input.transcriptionPolicy } satisfies ServerSchemas["UpdateSpaceRequest"]),
     },
     episodes: {
       create: (spaceId, input, idempotency) => post<Episode>(`${spacePath(spaceId)}/episodes`, 201, idempotency, { metadata: input.metadata, started_at: input.startedAt }),
       end: (spaceId, episodeId, idempotency) => post<EpisodeEnd>(`${episodePath(spaceId, episodeId)}/end`, 202, idempotency),
+    },
+    scheduledEpisodes: {
+      put: (spaceId, id, input) =>
+        send("PUT", scheduledEpisodePath(spaceId, id), 200, {
+          starts_at: input.startsAt,
+          expected_ends_at: input.expectedEndsAt,
+          expected_participants: input.expectedParticipants?.map(({ identityExternalId, name, role }) => ({ identity_external_id: identityExternalId, name, role })),
+          metadata: input.metadata,
+        } satisfies ServerSchemas["PutScheduledEpisodeRequest"]),
+      get: (spaceId, id) => send("GET", scheduledEpisodePath(spaceId, id), 200),
+      delete: (spaceId, id) => send("DELETE", scheduledEpisodePath(spaceId, id), 204),
     },
     participants: {
       admit: async (spaceId, episodeId, input, idempotency) => {
@@ -80,11 +99,35 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       rotate: (apiKeyId, input) => post<APIKeyWithSecret>(`${apiKeyPath(apiKeyId)}/rotate`, 200, undefined, { expires_at: input?.expiresAt }),
       revoke: (apiKeyId) => send<void>("DELETE", apiKeyPath(apiKeyId), 204),
     },
+    tenantHandovers: {
+      create: (input, idempotency) => post<TenantHandover>(`${tenantPath}/handovers`, 201, idempotency, { recipient_email: input.recipientEmail, expires_in_seconds: input.expiresInSeconds }),
+      get: (handoverId) => send<TenantHandover>("GET", `${tenantPath}/handovers/${segment(handoverId)}`, 200),
+      cancel: (handoverId) => send<TenantHandover>("POST", `${tenantPath}/handovers/${segment(handoverId)}/cancellation`, 200),
+    },
     recordings: {
       list: (input) => send<RecordingList>("GET", `${tenantPath}/recordings${query({ cursor: input?.cursor, episode_id: input?.episodeId, page_size: input?.pageSize, space_id: input?.spaceId })}`, 200),
       get: (recordingId) => send<Recording>("GET", recordingPath(recordingId), 200),
       requestExport: (recordingId) => send<RecordingExportRequestAcceptedResponse>("POST", `${recordingPath(recordingId)}/export`, 202, {}),
       createDownloadURL: (recordingId, input) => send<RecordingDownloadURL>("POST", `${recordingPath(recordingId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds, download: input.download }),
+    },
+    transcripts: {
+      list: (input) => send("GET", `${tenantPath}/transcripts${query({ cursor: input?.cursor, page_size: input?.pageSize, recording_id: input?.recordingId })}`, 200),
+      get: (id) => send("GET", transcriptPath(id), 200),
+      getDocument: (id) => send("GET", `${transcriptPath(id)}/document`, 200),
+      getText: (id) => request({ method: "GET", path: `${transcriptPath(id)}/text`, expectedStatus: 200, response: "text", retry: "always" }),
+      createDownloadURL: (id, input) => send("POST", `${transcriptPath(id)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds } satisfies ServerSchemas["CreateTranscriptDownloadURLRequest"]),
+      request: (recordingId, input) => send("POST", `${recordingPath(recordingId)}/transcripts`, 202, { idempotency_key: input.idempotencyKey, language: input.language, languages: input.languages?.slice() } satisfies ServerSchemas["RequestTranscriptRequest"]),
+      delete: (id) => send("DELETE", transcriptPath(id), 204),
+    },
+    webhookEndpoints: {
+      create: (input, idempotency) => post(webhookEndpointsPath, 201, idempotency, { api_version: input.apiVersion, enabled: input.enabled, event_types: [...input.eventTypes], name: input.name, url: input.url } satisfies ServerSchemas["CreateWebhookEndpointRequest"]),
+      list: (input) => send("GET", `${webhookEndpointsPath}${query({ cursor: input?.cursor, page_size: input?.pageSize })}`, 200),
+      get: (id) => send("GET", webhookEndpointPath(id), 200),
+      update: (id, input, idempotency) => writeWebhook("PATCH", id, input.revision, 200, idempotency, { api_version: input.apiVersion, enabled: input.enabled, event_types: input.eventTypes?.slice(), name: input.name, url: input.url } satisfies ServerSchemas["UpdateWebhookEndpointRequest"]),
+      rotateSecret: (id, input, idempotency) => post(`${webhookEndpointPath(id)}/rotate-secret`, 200, idempotency, { revoke_previous_immediately: input.revokePreviousImmediately } satisfies ServerSchemas["RotateWebhookSecretRequest"]),
+      delete: (id, revision, idempotency) => writeWebhook("DELETE", id, revision, 204, idempotency),
+      listDeliveries: (id, input) => send("GET", `${webhookEndpointPath(id)}/deliveries${query({ cursor: input?.cursor, page_size: input?.pageSize, state: input?.states, event_type: input?.eventTypes })}`, 200),
+      redeliver: (id, deliveryId, idempotency) => post(`${webhookEndpointPath(id)}/deliveries/${segment(deliveryId)}/redeliver`, 201, idempotency),
     },
     publicInvites: {
       get: (spaceId) => send<SpacePublicInvite>("GET", `${spacePath(spaceId)}/public-invite`, 200),
@@ -115,6 +158,7 @@ function createSpaceRequest(input: CreateSpaceInput) {
 }
 function participantAdmissionRequest(input: AdmitParticipantInput) {
   return {
+    admission: input.admission,
     name: input.name,
     role: input.role,
     identity_id: input.identityId,
@@ -132,9 +176,16 @@ function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknow
   };
 }
 // Undefined values are skipped, so a filter the caller left out never reaches the URL.
-function query(params: Readonly<Record<string, boolean | number | string | undefined>>): string {
+function query(params: Readonly<Record<string, boolean | number | string | readonly string[] | undefined>>): string {
   const search = new URLSearchParams();
-  for (const [name, value] of Object.entries(params)) if (value !== undefined) search.set(name, String(value));
+  for (const [name, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    if (typeof value === "object") {
+      for (const item of value) search.append(name, item);
+    } else {
+      search.set(name, String(value));
+    }
+  }
   const text = search.toString();
   return text === "" ? "" : `?${text}`;
 }

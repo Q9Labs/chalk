@@ -1,7 +1,9 @@
 import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
 export type { AccessGrant } from "../access/grant.js";
+import type { TenantHandoverClient } from "./tenant-handover-types.js";
 import type { APIKeyList, APIKeyWithSecret, CreateAPIKeyInput, ListAPIKeysInput, RotateAPIKeyInput } from "./api-key-types.js";
+import type { PageInput, ServerResourceMethods, ServerSchemas } from "./resource-types.js";
 export type * from "./api-key-types.js";
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
 export type ChalkServerClientOptions = {
@@ -11,9 +13,7 @@ export type ChalkServerClientOptions = {
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkServerHeaders;
 };
-export type ChalkIdempotencyOptions = {
-  readonly idempotencyKey?: string;
-};
+export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
 export type RecordingPolicy = "disabled" | "manual" | "automatic";
 export type TranscriptionPolicy = "disabled" | "on_demand" | "automatic";
 export type CreateSpaceInput = {
@@ -30,6 +30,7 @@ export type CreateSpaceInput = {
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
 export type UpdateSpaceInput = {
+  readonly metadata?: ServerSchemas["UpdateSpaceRequest"]["metadata"];
   readonly recordingPolicy?: RecordingPolicy;
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
@@ -71,10 +72,8 @@ export type SpaceList = {
   readonly spaces: readonly Space[];
   readonly pagination: Pagination;
 };
-export type ListSpacesInput = {
+export type ListSpacesInput = PageInput & {
   readonly archived?: boolean;
-  readonly cursor?: string;
-  readonly pageSize?: number;
 };
 export type CreateEpisodeInput = {
   readonly metadata?: unknown;
@@ -112,6 +111,7 @@ export type EpisodeEnd = {
   readonly status: string;
 };
 export type AdmitParticipantInput = {
+  readonly admission?: ServerSchemas["AdmitEpisodeParticipantRequest"]["admission"];
   /** Stable person key scoped to this tenant. Mutually exclusive with identityId. */
   readonly identityExternalId?: string;
   readonly identityId?: string;
@@ -248,17 +248,15 @@ export type RecordingList = {
   readonly pagination: Pagination;
   readonly recordings: readonly Recording[];
 };
-export type ListRecordingsInput = {
-  readonly cursor?: string;
+export type ListRecordingsInput = PageInput & {
   readonly episodeId?: string;
-  readonly pageSize?: number;
   readonly spaceId?: string;
 };
 export type CreateRecordingDownloadURLInput = {
   readonly expiresInSeconds: number;
   readonly download?: boolean;
 };
-export type ChalkServerClient = {
+export type ChalkServerClient = ServerResourceMethods & {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;
     create(input: CreateSpaceInput, options?: ChalkIdempotencyOptions): Promise<Space>;
@@ -282,6 +280,7 @@ export type ChalkServerClient = {
     rotate(apiKeyId: string, input?: RotateAPIKeyInput): Promise<APIKeyWithSecret>;
     revoke(apiKeyId: string): Promise<void>;
   };
+  readonly tenantHandovers: TenantHandoverClient;
   readonly recordings: {
     list(input?: ListRecordingsInput): Promise<RecordingList>;
     get(recordingId: string): Promise<Recording>;

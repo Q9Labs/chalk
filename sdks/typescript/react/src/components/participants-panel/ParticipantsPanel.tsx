@@ -1,6 +1,6 @@
-import { deviceHint } from "../../selectors/device-hint";
 import React, { useMemo, useState } from "react";
 import { CallCardStyles } from "../call-card/CallCardStyles";
+import { deviceHint } from "@q9labsai/chalk-client";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, Search01Icon } from "../../utils/icons";
 import { useHandOrder } from "../../internal/useHandOrder";
@@ -15,6 +15,8 @@ import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 export interface ParticipantListParticipant {
   id: string;
   displayName: string;
+  identityKind?: "user" | "agent" | "guest";
+  description?: string;
   deviceHint?: string;
   role?: string;
   /** Whether the participant has the endEpisode capability. */
@@ -224,6 +226,8 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantsSlice.roster.map((participant) => ({
         id: participant.participantId,
         displayName: participant.displayName,
+        ...(participant.identityKind === undefined ? {} : { identityKind: participant.identityKind }),
+        ...(participant.description === undefined ? {} : { description: participant.description }),
         deviceHint: deviceHint(participant, participantsSlice.roster),
         role: participant.role,
         isHost: participant.capabilities.includes("endEpisode"),

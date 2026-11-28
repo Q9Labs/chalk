@@ -3,5 +3,10 @@
     "file": "apps/api/docs/database-workflow.md",
     "path": "YYYYMMDDHHMMSS_description.sql",
     "reason": "Migration filename template, not a checked-in migration."
+  },
+  {
+    "file": "infrastructure/document-renderer/README.md",
+    "path": "image-manifest.json",
+    "reason": "Build output written by scripts/build-document-renderer-image.sh, not a checked-in file."
   }
 ]

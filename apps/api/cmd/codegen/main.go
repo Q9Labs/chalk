@@ -653,10 +653,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["maxLength"] = 512
 		schema[lengthUnitExtension] = codePointLengthUnit
 	}
-	if fieldName == "identity_external_id" {
-		schema["minLength"] = 1
-		schema["maxLength"] = 256
-	}
+	applyAdmissionFieldConstraints(schema, request, schemaName, fieldName)
 	if fieldName == "email" {
 		schema["format"] = "email"
 	}
@@ -1080,7 +1077,7 @@ func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if schemaName == "IssueAccessGrantRequest" && fieldName == "expected_media_connection_id" {
 		return true
 	}
-	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {
+	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" || fieldName == "service_id" || fieldName == "from_service_id" || fieldName == "to_service_id" {
 		return true
 	}
 	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "ChalkSFU")

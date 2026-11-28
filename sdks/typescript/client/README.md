@@ -17,7 +17,7 @@ pnpm add @q9labsai/chalk-client
 
 ## Create and join a Space
 
-Your backend mints an `AccessGrant` with the server SDK. Use `createChalkServerClient` for Tenant setup, Space creation, Participant admission, and server-only `getAccessRefreshState` for normal access refresh. Pass it through to the
+Your backend mints an `AccessGrant` with the server SDK. Use `createChalkServerClient` for Space creation and Participant admission, and server-only `getAccessRefreshState` for normal access refresh. Pass the grant through to the
 client unchanged: it is an opaque signed envelope, so application code does
 not construct or inspect it. `getAccess` may resolve with the fetch `Response`
 that carries the grant or with its decoded JSON; the client validates it and
@@ -53,6 +53,15 @@ when recovery needs it and retains healthy media for ordinary refresh and Sync
 recovery. No conditional is needed.
 
 HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
+
+## Server SDK operations
+
+Import `createChalkServerClient` from `@q9labsai/chalk-client/server` on your backend and configure it with your Tenant ID, API base URL, and Tenant API key. The SDK reports REST failures as `ChalkAPIError` with the HTTP status, Chalk error code, and request ID when present.
+
+- **Spaces and Participants:** `spaces.update(spaceId, { metadata, recordingPolicy, transcriptionPolicy })` sends the supplied fields. `participants.admit(spaceId, episodeId, input)` accepts `input.admission` of `"direct"` or `"policy"`; omit it to use the API default.
+- **Transcripts:** `transcripts.list` takes optional `recordingId`, `cursor`, and `pageSize` filters. `get`, `getDocument`, `getText`, and `createDownloadURL` take the Transcript ID and require `transcriptions:read`. `getText` returns the UTF-8 text as a string; `createDownloadURL(id, { expiresInSeconds })` returns the signed URL and headers. Use `transcripts.request(recordingId, { idempotencyKey, languages })` with `transcriptions:write` to request on-demand transcription; languages are optional and the same idempotency key should be reused on retries. `transcripts.delete(id)` requires `transcriptions:delete`.
+- **Webhook endpoints:** `webhookEndpoints` offers `create`, `list`, `get`, `update`, `rotateSecret`, `delete`, `listDeliveries`, and `redeliver`. See [webhook endpoint management](docs/webhooks.md#manage-webhook-endpoints) for scopes, revisions, and idempotency.
+- **Scheduled Episodes:** `scheduledEpisodes.put(spaceId, id, { startsAt, expectedEndsAt, expectedParticipants, metadata })` creates or replaces a plan under a caller-assigned UUID; participants and metadata are optional. Use `scheduledEpisodes.get(spaceId, id)` to read the plan and `scheduledEpisodes.delete(spaceId, id)` to cancel it. Cancellation reserves the ID, even if no plan existed yet, so restoring a cancelled plan needs a new UUID. Reads require `episodes:read` and writes require `episodes:write`. Scheduling never starts an Episode or grants access.
 
 ## Snapshot store
 
@@ -96,6 +105,8 @@ the client will no longer be used; it releases the Connection and its resources.
 Use `client.recording.start()` and `client.recording.stop()` inside an Episode, or set the Space's Automatic Recording policy. There is no REST Recording start/stop operation.
 
 The server SDK requests Exports and creates download URLs. Subscribe to `recording.completed` for verified MP4 readiness and `transcript.completed` for document readiness; both also emit `started` and `failed`. See the [webhook guide](docs/webhooks.md).
+
+A service that owns a Tenant can offer it to a person's Chalk dashboard account with `tenantHandovers.create`, inspect it with `tenantHandovers.get`, and cancel it with `tenantHandovers.cancel`. Creation takes an idempotency key and returns the handover ID used in the dashboard acceptance link. The lifecycle and cutoff semantics are in [the Tenant handover guide](../../../docs/tenant-handover.md).
 
 ## Feature controllers
 

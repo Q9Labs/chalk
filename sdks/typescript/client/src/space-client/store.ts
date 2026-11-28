@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { connectionErrorCode } from "./errors";
+import { presentingFormatIdsFor } from "../presenting/files";
 import { structurallyEqual } from "./structural-equal";
 import type { ConnectionLifecycleSnapshot } from "../connection";
 import type { ConnectionSlice, MediaSlice, SpaceSnapshot } from "./types";
@@ -24,7 +25,7 @@ const EMPTY = empty({
   recording: empty({ current: null }),
   offline: empty({ pending: empty([]), decisionNeeded: false, policy: "send" }),
   whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }), access: empty({ canDraw: false, policy: null, permissions: empty([]) }) }),
-  presenting: empty({ status: "connecting", available: false, revision: 0, documents: empty([]), manifests: empty({}) }),
+  presenting: empty({ status: "connecting", available: false, formats: presentingFormatIdsFor(), revision: 0, documents: empty([]), manifests: empty({}) }),
 }) satisfies SpaceSnapshot;
 
 export class SpaceStore {

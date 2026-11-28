@@ -50,14 +50,9 @@ test("one person presents a PDF and it lands on both stages", async () => {
   try {
     const [a, b] = await joinTwo(contexts);
 
-    // The Present dock button is its own control beside screen share.
-    const present = a.getByRole("button", { name: "Present", exact: true });
-    await present.waitFor();
-    await present.click();
-    const chooser = a.getByRole("dialog", { name: "Present a file or link", exact: true });
-    await chooser.waitFor();
-
-    const [fileChooser] = await Promise.all([a.waitForEvent("filechooser"), chooser.getByRole("button", { name: /Choose a file|Preparing/ }).click()]);
+    // Presenting a file lives in the Share menu, and its entry opens the file picker.
+    await a.getByRole("button", { name: "Share options", exact: true }).click();
+    const [fileChooser] = await Promise.all([a.waitForEvent("filechooser"), a.getByRole("menuitem", { name: /^A file/ }).click()]);
     await fileChooser.setFiles({ name: "product-plan.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF_BYTES) });
 
     // Both stages gain the document item: the presenter sees their tile, the viewer the same document.
@@ -66,8 +61,18 @@ test("one person presents a PDF and it lands on both stages", async () => {
     }
     await expect.poll(() => a.locator('[data-stage-item^="document:"][data-stage-role="primary"]').count(), { timeout: 10_000 }).toBe(1);
 
-    // Until the renderer finishes, the tile explains the document is being prepared.
-    await expect.poll(async () => (await a.locator('[data-stage-item^="document:"]').textContent()) ?? "", { timeout: 10_000 }).toContain("product-plan.pdf");
+    // The presenter's tile either says the file is being prepared or, once rendered, shows the page named after the file.
+    const tile = a.locator('[data-stage-item^="document:"]');
+    await expect
+      .poll(
+        async () =>
+          tile
+            .getByText("Preparing your file")
+            .or(tile.getByRole("img", { name: /product-plan\.pdf/ }))
+            .count(),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(0);
 
     // The viewer's copy is the same document, so the presenter stopping removes it everywhere.
     const stop = a.getByRole("button", { name: "Stop showing", exact: true });
@@ -85,7 +90,7 @@ async function presentingEnabled(enabled: boolean): Promise<void> {
   await execFileAsync("psql", [database, "-v", "ON_ERROR_STOP=1", "-q", "-c", `insert into presenting_settings (singleton, enabled) values (true, ${enabled}) on conflict (singleton) do update set enabled = excluded.enabled`]);
 }
 
-test("the Present button is hidden when Sync does not offer Presenting", async () => {
+test("Present a file is hidden from the Share menu when Sync does not offer Presenting", async () => {
   await presentingEnabled(false);
   let browser: Browser | undefined;
   try {
@@ -97,7 +102,9 @@ test("the Present button is hidden when Sync does not offer Presenting", async (
     await page.getByLabel("Your name", { exact: true }).fill("Nora");
     await page.getByRole("button", { name: "Join call", exact: true }).click();
     await page.getByRole("button", { name: "Video tile for Nora", exact: true }).waitFor();
-    await expect.poll(async () => page.getByRole("button", { name: "Present", exact: true }).count(), { timeout: 5_000 }).toBe(0);
+    await page.getByRole("button", { name: "Share options", exact: true }).click();
+    await page.getByRole("menu").waitFor();
+    await expect.poll(async () => page.getByRole("menuitem", { name: /^(A|Another) file/ }).count(), { timeout: 5_000 }).toBe(0);
   } finally {
     await browser?.close();
     await presentingEnabled(true);

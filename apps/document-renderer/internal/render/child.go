@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/q9labs/chalk/apps/document-renderer/internal/office"
 	_ "golang.org/x/image/webp"
 )
 
@@ -29,11 +30,13 @@ type inventoryPage struct {
 // native PDFium call, so CPU, address-space, output and wall-clock bounds are
 // all enforced around this process.
 func RunChild(mode string, args []string) int {
-	if err := applyChildRlimits(); err != nil {
+	if err := applyChildRlimits(mode); err != nil {
 		fmt.Fprintln(os.Stderr, "renderer sandbox setup failed:", err)
 		return 2
 	}
 	switch mode {
+	case "office":
+		return office.RunChild(args)
 	case "inventory":
 		return runInventoryChild(args)
 	case "page":
@@ -67,7 +70,7 @@ func runTimeoutProbeChild() int {
 // RunPageChild keeps the original benchmark entrypoint. Production uses
 // RunChild("page", ...) through RENDER_CHILD_MODE.
 func RunPageChild(args []string) int {
-	if err := applyChildRlimits(); err != nil {
+	if err := applyChildRlimits("page"); err != nil {
 		fmt.Fprintln(os.Stderr, "renderer sandbox setup failed:", err)
 		return 2
 	}

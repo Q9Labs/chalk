@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20261126090000.
+-- Schema snapshot through migration 20261127140000.
 create table tenants (
     recording_render_mode text not null default 'on_demand' check (recording_render_mode in ('on_demand', 'automatic')),
     id uuid primary key,
@@ -113,6 +113,48 @@ create table login_sessions (
     created_at timestamptz not null default now(),
     unique(token_hash)
 );
+
+create table tenant_handovers (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    recipient_email text not null,
+    status text not null check (status in ('pending', 'accepted', 'canceled')),
+    request_key text not null,
+    request_fingerprint bytea not null,
+    from_service_id text not null,
+    to_service_id text not null,
+    initiated_by_kind text not null check (initiated_by_kind in ('service', 'operator')),
+    initiated_by_service_id text,
+    initiated_by_operator text,
+    accepted_by_user_id uuid references users(id),
+    accepted_at timestamptz,
+    canceled_by_kind text check (canceled_by_kind in ('service', 'operator')),
+    canceled_by_service_id text,
+    canceled_by_operator text,
+    canceled_at timestamptz,
+    expires_at timestamptz not null,
+    updated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    unique (tenant_id, request_key),
+    constraint tenant_handovers_emails_check check (length(recipient_email) between 3 and 320 and btrim(recipient_email) = recipient_email),
+    constraint tenant_handovers_services_check check (
+        length(from_service_id) between 1 and 128 and btrim(from_service_id) = from_service_id
+        and length(to_service_id) between 1 and 128 and btrim(to_service_id) = to_service_id
+    ),
+    constraint tenant_handovers_initiator_check check (
+        (initiated_by_kind = 'service' and initiated_by_service_id is not null and initiated_by_operator is null)
+        or (initiated_by_kind = 'operator' and initiated_by_operator is not null and initiated_by_service_id is null)
+    ),
+    constraint tenant_handovers_acceptor_check check ((accepted_at is null) = (accepted_by_user_id is null)),
+    constraint tenant_handovers_canceler_check check (
+        (canceled_at is null) = (canceled_by_kind is null)
+        and (canceled_by_kind is null or (canceled_by_kind = 'service' and canceled_by_service_id is not null and canceled_by_operator is null)
+        or (canceled_by_kind = 'operator' and canceled_by_operator is not null and canceled_by_service_id is null))
+    )
+);
+create unique index tenant_handovers_one_pending_idx on tenant_handovers(tenant_id) where status = 'pending';
+create index tenant_handovers_tenant_created_at_id_idx on tenant_handovers(tenant_id, created_at desc, id desc);
+create index tenant_handovers_recipient_status_idx on tenant_handovers(recipient_email, status, created_at desc);
 
 create table api_keys (
     id uuid primary key,
@@ -566,6 +608,7 @@ create table episode_create_requests (
 create table participants (
     id uuid primary key,
     name text,
+    description text,
     metadata jsonb,
     capabilities text[] not null,
     tenant_id uuid not null references tenants(id),
@@ -808,7 +851,9 @@ create table sync_chat_attachments (
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             'application/vnd.oasis.opendocument.text',
             'application/vnd.oasis.opendocument.spreadsheet',
-            'application/vnd.oasis.opendocument.presentation'
+            'application/vnd.oasis.opendocument.presentation',
+            'application/vnd.apple.keynote',
+            'application/x-iwork-keynote-sffkey'
         )
     ),
     check (byte_length between 1 and 26214400),
@@ -5259,6 +5304,7 @@ create table participant_device_hints (
     participant_id uuid primary key,
     generation bigint not null check (generation > 0),
     device_type text check (device_type in ('phone', 'tablet', 'computer')),
+    device_kind text check (device_kind in ('iphone', 'ipad', 'android_phone', 'android_tablet', 'android_foldable', 'mac', 'windows', 'linux', 'chromeos')),
     foreign key (tenant_id, space_id, episode_id, participant_id)
         references participants(tenant_id, space_id, episode_id, id) on delete cascade
 );
@@ -5730,7 +5776,7 @@ create table presenting_documents (
         references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (status in ('preparing', 'ready', 'failed')),
-    check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    check (mime_type in ('application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint', 'application/vnd.oasis.opendocument.presentation', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.oasis.opendocument.text', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'application/vnd.oasis.opendocument.spreadsheet', 'text/plain', 'application/vnd.apple.keynote', 'application/x-iwork-keynote-sffkey')),
     check (byte_length between 1 and 26214400),
     check (octet_length(source_sha256) = 32),
     check (octet_length(source_object_key) between 1 and 1024),

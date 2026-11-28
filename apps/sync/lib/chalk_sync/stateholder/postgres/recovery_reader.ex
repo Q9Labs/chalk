@@ -8,6 +8,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.JoinSeats
+  alias ChalkSync.Stateholder.Postgres.ParticipantDetails
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Recovery, as: SQL
   alias ChalkSync.Stateholder.Recovery
@@ -33,8 +34,15 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
                params,
                timeout: @transaction_timeout_ms
              ) do
-          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &Control.event_from_row/1)}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
+          {:ok, %{rows: rows}} ->
+            ParticipantDetails.overlay_page(
+              Database.connection(episode),
+              episode,
+              Enum.map(rows, &Control.event_from_row/1)
+            )
+
+          {:error, _reason} ->
+            {:retryable, :dependency_unavailable}
         end
       end,
       {:retryable, :dependency_unavailable}
@@ -61,18 +69,13 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
           {:terminal, reason} ->
             terminal_recovery(state, reason)
 
-          {:error, reason} ->
-            {:error, reason}
+          {:error, _reason} = error ->
+            error
         end
 
-      case result do
-        %Recovery{replay_cursor: revision} = recovery
-        when status == "ended" and is_integer(revision) ->
-          %{recovery | mode: :replay, terminal_reason: :episode_ended}
-
-        other ->
-          other
-      end
+      result
+      |> Recovery.replay_if_ended(status)
+      |> ParticipantDetails.overlay_recovery(connection, identity.episode)
     else
       {:error, reason} -> {:error, reason}
     end
@@ -85,8 +88,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     with {:ok, control, status} <- read_control(connection, params),
          {:ok, state} <- Control.validate_fold(episode, control) do
       build_recovery(connection, episode, state, status, cursor, 1)
-    else
-      {:error, reason} -> {:error, reason}
+      |> ParticipantDetails.overlay_recovery(connection, episode)
     end
   end
 

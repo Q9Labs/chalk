@@ -9,7 +9,7 @@ export interface CallHostControls {
 
 export interface SpaceHeaderProps {
   spaceName: string;
-  people?: readonly { readonly participantId: string; readonly displayName: string }[];
+  people?: readonly { readonly participantId: string; readonly displayName: string; readonly identityKind?: "user" | "agent" | "guest" }[];
   onTogglePeople?: () => void;
   knockCount?: number;
   shareUrl?: string;

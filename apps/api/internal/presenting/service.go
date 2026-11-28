@@ -23,7 +23,7 @@ func (s Service) Create(ctx context.Context, subject Subject, attachmentID utili
 	if err != nil {
 		return Document{}, err
 	}
-	if !supportedMIMEType(document.MIMEType) {
+	if !s.formats.AcceptsMIMEType(document.MIMEType) {
 		return Document{}, ErrUnsupportedType
 	}
 	if !document.Created {

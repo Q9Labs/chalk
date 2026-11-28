@@ -7,8 +7,8 @@ from release_core import digest, require
 from alchemy_renderer import read_inputs
 
 
-def renderer_inputs(provider):
-    return read_inputs(provider, 'production')
+def renderer_inputs(provider, package='zip'):
+    return read_inputs(provider, 'production', package)
 
 
 def binding_target(manifest):
@@ -23,8 +23,18 @@ def check_binding(function, release, code_hash):
     require(function['CodeSha256'] == code_hash, 'document renderer ZIP digest changed')
 
 
-def release_environment(provider, inputs, zip_path):
+def check_image_binding(function, release, image_uri):
+    config = function['Configuration']
+    require(config['State'] == 'Active' and config['LastUpdateStatus'] == 'Successful', 'document renderer image update is not healthy')
+    require(config['PackageType'] == 'Image', 'document renderer function is not an image function')
+    require(config['Environment']['Variables']['CHALK_RELEASE_ID'] == release, 'document renderer image runtime release binding mismatch')
+    require(function['Code']['ResolvedImageUri'] == image_uri, 'document renderer image digest changed')
+
+
+def release_environment(provider, inputs, zip_path=None):
     function = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
+    if zip_path is None:
+        return function['Environment']['Variables']
     with ZipFile(zip_path) as archive:
         names = set(archive.namelist())
     require({'bootstrap', 'lib/libpdfium.so'} <= names, 'document renderer ZIP lacks its runtime or PDFium library')
@@ -40,6 +50,10 @@ def release_config_digest(environment, inputs):
 def verify_renderer(provider, inputs, release):
     release = release or inputs['release_id']
     require(inputs['release_id'] == release, 'document renderer state release binding mismatch')
+    if inputs.get('package_type') == 'image':
+        function = provider.aws('lambda', 'get-function', '--function-name', inputs['function_name'])
+        check_image_binding(function, release, inputs['image_repository_uri'] + '@' + inputs['image_digest'])
+        return {'release_id': release, 'verified': True}
     function = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
     check_binding(function, release, inputs['artifact_sha256_base64'])
     return {'release_id': release, 'verified': True}

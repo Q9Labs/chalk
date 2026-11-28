@@ -106,7 +106,7 @@ const makeState = () => {
     Function: updatingRow("Function", resourceTypes.Function, beforeDeclaration.fn as unknown as Props, afterDeclaration.fn as unknown as Props, {
       functionName: releaseA.function_name,
       functionArn: "arn:aws:lambda:ap-southeast-1:000000000000:function:chalk-nightly-test-document-renderer",
-      codeSha256: releaseA.artifact_sha256_base64,
+      codeSha256: "artifact_sha256_base64" in releaseA ? releaseA.artifact_sha256_base64 : "",
       version: "$LATEST",
     }),
     Errors: baseRow("Errors", resourceTypes.Errors, beforeDeclaration.alarms.Errors as Props, { stable: "errors" }),

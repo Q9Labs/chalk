@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { ChatUploadFile, SpaceClient } from "@q9labsai/chalk-client";
 import { prepareChatAttachmentBatch } from "../composite/chat-upload-file";
-import { presentFiles, splitPresentingFiles } from "./presenting-files";
+import { presentableAccept, presentableFilesHint, presentableMimeTypes, presentFiles, presentingFileProblem, splitPresentingFiles } from "./presenting-files";
 
 function file(name: string, type = "application/pdf", byteLength = 1024): ChatUploadFile {
   return new File([new Uint8Array(byteLength)], name, { type }) as ChatUploadFile;
@@ -56,15 +56,39 @@ it("does not send hidden chat when both Presenting and chat are unavailable", as
   expect(sent).toEqual([]);
 });
 
-it("returns a failed Stage file for composer staging instead of sending it", async () => {
+it("returns a failed Stage file to the presenter instead of staging or sending it in chat", async () => {
   const { api, presented, sent } = client(false);
   const pdf = file("deck.pdf");
   const result = await presentFiles([pdf], api, { presentingAvailable: true, chatEnabled: true });
   expect(result.presented).toBeUndefined();
-  expect(result.chatFiles).toEqual([pdf]);
-  expect(result.failures).toEqual([{ fileName: "deck.pdf", reason: "failed" }]);
+  expect(result.stageFailure).toEqual({ file: pdf, failure: { fileName: "deck.pdf", reason: "failed" } });
+  expect(result.chatFiles).toEqual([]);
+  expect(result.failures).toEqual([]);
   expect(presented).toEqual(["attachment-deck.pdf"]);
   expect(sent).toEqual([]);
+});
+
+it("acknowledges the Stage file before uploading and passes upload progress through", async () => {
+  const events: string[] = [];
+  const api = {
+    chat: {
+      files: {
+        upload: async (uploaded: ChatUploadFile, options?: { onProgress?: (fraction: number) => void }) => {
+          events.push("upload");
+          options?.onProgress?.(0.5);
+          return { attachmentId: `attachment-${(uploaded as File).name}` };
+        },
+      },
+    },
+    presenting: { present: async () => ({ kind: "accepted", revision: 1 }) as const },
+  } as unknown as SpaceClient;
+  const result = await presentFiles([file("deck.pdf")], api, { onStageFile: (name) => events.push(`stage:${name}`), onProgress: (fraction) => events.push(`progress:${fraction}`) });
+  expect(result.presented).toBe("deck.pdf");
+  expect(events).toEqual(["stage:deck.pdf", "upload", "progress:0.5"]);
+});
+
+it("describes presentable files from the accepted types", () => {
+  expect(presentableFilesHint()).toBe("PDF or image, up to 25 MB");
 });
 
 it("splits a multi-file drop into one stage candidate and the remaining chat files", () => {
@@ -92,13 +116,13 @@ it("stages only five chat files and counts the rest", () => {
   expect(split.chatOverflow).toBe(1);
 });
 
-it("keeps the failed Stage file inside the five-file composer batch", async () => {
-  const files = Array.from({ length: 6 }, (_, index) => file(`deck-${index}.pdf`));
+it("keeps the failed Stage file out of the composer batch and stages the rest", async () => {
+  const files = Array.from({ length: 6 }, (_, index) => file("deck-" + index + ".pdf"));
   const { api } = client(false);
   const result = await presentFiles(files, api, { presentingAvailable: true, chatEnabled: true });
-  expect(result.chatFiles).toEqual(files.slice(0, 5));
-  expect(result.chatOverflow).toBe(1);
-  expect(result.failures).toEqual([{ fileName: "deck-0.pdf", reason: "failed" }]);
+  expect(result.stageFailure?.failure).toEqual({ fileName: "deck-0.pdf", reason: "failed" });
+  expect(result.chatFiles).toEqual(files.slice(1, 6));
+  expect(result.chatOverflow).toBe(0);
 });
 
 it("skips empty files instead of blocking the valid chat batch", () => {
@@ -129,4 +153,30 @@ it("the composer accepts files up to its remaining capacity", () => {
 it("the composer still rejects an unsupported file before staging the batch", () => {
   const batch = prepareChatAttachmentBatch([file("notes.txt", "text/plain"), file("archive.zip", "application/zip")], 0);
   expect(batch.invalid?.fileName).toBe("archive.zip");
+});
+
+it("keeps Office files in chat until the server accepts their formats", () => {
+  const deck = file("deck.pptx", "");
+  const split = splitPresentingFiles([deck], { presentingAvailable: true, chatEnabled: true });
+  expect(split.stageFile).toBeUndefined();
+  expect(presentingFileProblem(deck)).toBe("unsupported");
+});
+
+it("presents Office and Keynote files once their formats are accepted, even when the browser reports no type", () => {
+  const deck = file("deck.pptx", "");
+  const old = file("old.ppt", "application/octet-stream");
+  const keynote = file("talk.key", "");
+  const formats = ["pdf", "pptx", "ppt", "key"] as const;
+  expect(splitPresentingFiles([deck], { formats }).stageFile).toBe(deck);
+  expect(splitPresentingFiles([old], { formats }).stageFile).toBe(old);
+  expect(splitPresentingFiles([keynote], { formats }).stageFile).toBe(keynote);
+  expect(presentingFileProblem(keynote, formats)).toBeNull();
+  expect(presentingFileProblem(keynote, ["pdf", "pptx"])).toBe("unsupported");
+});
+
+it("derives the picker's accept list and hint from the accepted formats", () => {
+  expect(presentableMimeTypes().has("text/plain")).toBe(false);
+  expect(presentableMimeTypes(["txt"]).has("text/plain")).toBe(true);
+  expect(presentableAccept(["pdf", "docx"])).toBe("application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx");
+  expect(presentableFilesHint(["pdf", "pptx", "docx", "xlsx"])).toBe("PDF, slides, documents or spreadsheets, up to 25 MB");
 });

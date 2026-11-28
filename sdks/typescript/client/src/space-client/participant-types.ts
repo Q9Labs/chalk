@@ -1,4 +1,5 @@
 import type { ChalkParticipantMediaState } from "../collaboration/types";
+import type { ParticipantDeviceKind } from "../sync/device-kind";
 import type { V1AdmissionPolicy, V1AdmissionTarget } from "../sync/v1-types";
 import type { Capability } from "./types";
 
@@ -10,9 +11,15 @@ export type ParticipantPresence = {
   readonly connectionQuality?: import("../media/link-quality").LinkTier;
 };
 export type Participant = {
+  /** Whether this seat belongs to a person or an admitted agent. Absent on older Sync connections. */
+  readonly identityKind?: "user" | "agent" | "guest";
+  /** Trusted backend-provided plain-text line about this seat. Absent when unset or on older Sync connections. */
+  readonly description?: string;
   /** Stable person identity, independent of the per-device participant ID. */
   readonly identityId?: string;
   readonly deviceType?: "phone" | "tablet" | "computer";
+  /** The device that person declared. Absent for a client that declared nothing. */
+  readonly deviceKind?: ParticipantDeviceKind;
   readonly participantId: string;
   readonly displayName: string;
   readonly role: string;

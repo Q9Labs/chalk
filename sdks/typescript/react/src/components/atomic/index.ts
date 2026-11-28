@@ -1,6 +1,7 @@
 export * from "../audio-output/AudioOutput";
 export * from "../control-bar/control-bar-button";
 export * from "../participant-tile/ParticipantTile";
+export * from "./AIBadge";
 export * from "./AudioIndicator";
 export * from "./Avatar";
 export * from "./HandRaiseIndicator";
