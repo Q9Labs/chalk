@@ -36,7 +36,7 @@ export const NameTag = memo(function NameTag({ name, agent = false, muted = fals
         <ChalkText color={fixed.overlayText} numberOfLines={1} style={styles.name} variant="label">
           {name}
         </ChalkText>
-        {agent ? <AIBadge /> : null}
+        {agent ? <AIBadge color={fixed.overlayText} /> : null}
         {following ? (
           <ChalkText color={fixed.overlayText} variant="label">
             following

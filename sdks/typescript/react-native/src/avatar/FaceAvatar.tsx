@@ -5,7 +5,8 @@ import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useShare
 import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 import { timings } from "../motion/motion";
 import { AIBadge } from "../primitives/AIBadge";
-import { easings, identityColors } from "../theme/tokens";
+import { useTheme } from "../theme/theme";
+import { corners, easings, identityColors, space } from "../theme/tokens";
 
 export type FaceAvatarProps = {
   readonly name: string;
@@ -37,6 +38,7 @@ const CLOSED = 0.05;
  */
 export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle", level, lookAround = false, showAIBadge = false, testID }: FaceAvatarProps): React.JSX.Element {
   const reduceMotion = useReducedMotion();
+  const { colors } = useTheme();
   const scene = useMemo(() => createFacehashScene({ name, colorsLength: identityColors.length, intensity3d: INTENSITY[style] }), [name, style]);
   const background = getColor(identityColors, scene.data.colorIndex);
   const foreground = getForegroundColor(background);
@@ -140,7 +142,7 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
         </Animated.View>
       </Animated.View>
       {showAIBadge ? (
-        <View pointerEvents="none" style={styles.aiBadge}>
+        <View pointerEvents="none" style={[styles.aiBadge, { backgroundColor: colors.surface }]}>
           <AIBadge />
         </View>
       ) : null}
@@ -150,7 +152,7 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
 
 const styles = StyleSheet.create({
   circle: { overflow: "hidden" },
-  aiBadge: { position: "absolute", right: 0, bottom: 0 },
+  aiBadge: { position: "absolute", right: 0, bottom: 0, padding: space["0-5"], borderRadius: corners.pill },
   // The initial sits on y = 70 with a 26-unit font, so its baseline is near y = 79.
   mouthOrigin: { transformOrigin: "50% 79%" },
 });

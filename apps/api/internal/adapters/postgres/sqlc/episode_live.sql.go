@@ -112,6 +112,60 @@ func (q *Queries) GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEp
 	return i, err
 }
 
+const listSpaceLobbyParticipants = `-- name: ListSpaceLobbyParticipants :many
+select participants.id,
+       coalesce(participants.name, '') as display_name,
+       (case
+         when identities.id is not null then identities.kind
+         when participants.account_id is not null or participants.role = 'owner' then 'user'
+         else 'guest'
+       end)::text as identity_kind
+from episodes
+join participants
+  on participants.tenant_id = episodes.tenant_id
+ and participants.space_id = episodes.space_id
+ and participants.episode_id = episodes.id
+left join identities
+  on identities.tenant_id = participants.tenant_id
+ and identities.id = participants.identity_id
+where episodes.tenant_id = $1
+  and episodes.space_id = $2
+  and episodes.status in ('active', 'ending')
+  and participants.status in ('joining', 'active')
+order by participants.created_at, participants.id
+`
+
+type ListSpaceLobbyParticipantsParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SpaceID  pgtype.UUID `json:"space_id"`
+}
+
+type ListSpaceLobbyParticipantsRow struct {
+	ID           pgtype.UUID `json:"id"`
+	DisplayName  string      `json:"display_name"`
+	IdentityKind string      `json:"identity_kind"`
+}
+
+func (q *Queries) ListSpaceLobbyParticipants(ctx context.Context, arg ListSpaceLobbyParticipantsParams) ([]ListSpaceLobbyParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listSpaceLobbyParticipants, arg.TenantID, arg.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpaceLobbyParticipantsRow
+	for rows.Next() {
+		var i ListSpaceLobbyParticipantsRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.IdentityKind); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockDashboardJoinIntentForUpdate = `-- name: LockDashboardJoinIntentForUpdate :one
 select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 from sync_lifecycle_intents

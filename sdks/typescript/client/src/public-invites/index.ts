@@ -2,6 +2,8 @@ export { createChalkPublicClient, createChalkPublicInviteClient } from "./client
 export { parseInviteCode } from "./code.js";
 export { arrivalErrorCode, arrivalRetryDelayMs, arriveRetryingEndingEpisode, entranceStep, isTerminalArrivalError } from "./entrance.js";
 export type { EntranceStep } from "./entrance.js";
+export { lobbyRoster } from "./lobby.js";
+export type { LobbyRoster } from "./lobby.js";
 export { createPublicSpaceSession, resumePublicSpaceSession } from "./session.js";
 export type { AdmittedArrival, PublicSpaceSession, PublicSpaceSessionOptions } from "./session.js";
 export { buildInviteCodeLink, buildSpaceInviteLink, canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, INVITE_HOSTS, parseChalkInviteLink, parseSpaceInviteLink, readSpaceInviteToken, verifiedSpaceInviteLink } from "./link.js";
@@ -18,6 +20,7 @@ export type {
   ArriveBySpacePublicInvite,
   GetSpacePublicInviteArrival,
   LeaveSpacePublicInviteArrival,
+  LobbyParticipant,
   PublicArrivalOptions,
   PublicArrivalReference,
   PublicRefreshAccessInput,
@@ -26,6 +29,7 @@ export type {
   PublicSpaceArrivalAccess,
   PublicSpaceCreated,
   RefreshSpacePublicInviteAccess,
+  SpaceEntrancePreparation,
 } from "./types.js";
 
 export { AccessMediaProofRejectedError, ArrivalInvalidHandleError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "../generated/schemas.js";

@@ -14,7 +14,7 @@ export function createPublicInviteClient(): ChalkPublicClient {
   const status = async () => arrival;
   const leave = async () => undefined;
   return {
-    prepareSpaceEntrance: async () => undefined,
+    prepareSpaceEntrance: async () => ({ prepared: false, participants: [] }),
     arrive,
     arriveBySpacePublicInvite: arrive,
     create: unexpected,

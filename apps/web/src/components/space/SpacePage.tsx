@@ -8,9 +8,11 @@ import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
+import { useEntrance } from "./useEntrance";
+import { useLobbyParticipants } from "./useLobbyParticipants";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
-import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
+import { canStart, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
 import { FailedEntry } from "./FailedEntry";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
@@ -57,6 +59,7 @@ export function SpacePage(props: SpacePageProps = {}) {
 function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const client = useMemo(() => createPublicInviteClient(), []);
+  const lobbyParticipants = useLobbyParticipants(client, inviteCode);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
@@ -344,6 +347,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             message={current.failure?.message ?? `Asking to join ${current.waiting.spaceName ?? "the call"}`}
             detail={current.failure ? undefined : "The host will let you in."}
             joiningAs={current.failure ? undefined : displayName.trim()}
+            participants={lobbyParticipants}
             action={{ label: "Cancel", onClick: () => void cancel(), disabled: current.cancelling }}
           />
         );
@@ -362,6 +366,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               warmCall();
             }}
             joining={current.phase !== "idle"}
+            participants={lobbyParticipants}
             onJoin={(devices: PreJoinJoinOptions) => start({ ...devices, displayName }, true)}
           />
         ) : (
@@ -388,20 +393,6 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       ) : null}
     </div>
   );
-}
-
-/** The entrance's state and its one way to change it. `send` applies an event at once and says whether it changed anything, so a double click starts one arrival. */
-function useEntrance(initial: () => Entrance) {
-  const [entrance, setEntrance] = useState(initial);
-  const latest = useRef(entrance);
-  const send = useCallback((event: EntranceEvent): boolean => {
-    const next = entranceReducer(latest.current, event);
-    if (next === latest.current) return false;
-    latest.current = next;
-    setEntrance(next);
-    return true;
-  }, []);
-  return { entrance, send, latest };
 }
 
 function resumeFailure(cause: unknown): EntryFailure {

@@ -39,6 +39,7 @@ type EpisodeLifecycleService interface {
 	RequestParticipantRemoval(context.Context, episodes.RequestParticipantRemovalInput) (episodes.Removal, error)
 	RequestEpisodeEnd(context.Context, episodes.RequestEpisodeEndInput) (episodes.EndRequest, error)
 	SetDeadline(context.Context, episodes.SetDeadlineInput) (episodes.ControlRequest, error)
+	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error)
 }
 
 type SyncTokenIssuer interface {

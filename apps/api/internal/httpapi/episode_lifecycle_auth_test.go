@@ -24,6 +24,10 @@ type admissionLifecycleProbe struct {
 	calls     int
 }
 
+func (p *admissionLifecycleProbe) ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error) {
+	return nil, nil
+}
+
 func (p *admissionLifecycleProbe) GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]episodes.AttendanceParticipant, error) {
 	return nil, nil
 }

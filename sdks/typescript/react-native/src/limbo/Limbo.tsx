@@ -1,8 +1,11 @@
+import { lobbyRoster, type LobbyParticipant } from "@q9labsai/chalk-client";
 import { useEffect, useRef } from "react";
 import { AccessibilityInfo, findNodeHandle, StyleSheet, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
+import { FaceAvatar } from "../avatar/FaceAvatar";
+import { AIBadge } from "../primitives/AIBadge";
 import { ChalkText } from "../primitives/ChalkText";
 import { PillButton } from "../primitives/PillButton";
 import { useTheme } from "../theme/theme";
@@ -21,15 +24,18 @@ export type LimboProps = {
   readonly callName: string;
   /** Shows the recording consent line while joining or knocking. */
   readonly recording: boolean;
+  /** Privacy-limited people already in the call, shown before the joiner enters. */
+  readonly participants?: readonly LobbyParticipant[];
 };
 
 /** The limbo card (`.lmsg`) centred over the veiled call, with the mockup's copy for each state. */
-export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Element {
+export function Limbo({ state, callName, recording, participants = [] }: LimboProps): React.JSX.Element {
   const { colors } = useTheme();
   const cardStyle = [styles.card, { backgroundColor: colors.surface, borderColor: colors.line }];
   const cardRef = useMeasuredRef<View>("limbo.card", cardStyle);
   const actionRef = useRef<View>(null);
   const consent = recording && (state.kind === "joining" || state.kind === "knocking") ? <Consent /> : null;
+  const lobby = (state.kind === "joining" || state.kind === "knocking") && participants.length > 0 ? <Lobby participants={participants} /> : null;
   // The mockup moves focus to the card's button when a state with one appears.
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Move native accessibility focus to the mounted action when the limbo state changes.
   useEffect(() => {
@@ -41,9 +47,13 @@ export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Ele
     <View pointerEvents="box-none" style={styles.limbo} testID="frame.limbo">
       <View accessibilityLiveRegion={state.kind === "refused" ? "assertive" : "polite"} accessibilityRole={state.kind === "refused" ? "alert" : "summary"} ref={cardRef} style={cardStyle} testID="limbo.card">
         {state.kind === "joining" ? (
-          <Progress message={`${state.rejoining ? "Rejoining" : "Joining"} ${callName}…`} />
+          <>
+            {lobby}
+            <Progress message={`${state.rejoining ? "Rejoining" : "Joining"} ${callName}…`} />
+          </>
         ) : state.kind === "knocking" ? (
           <>
+            {lobby}
             <Title>{`Asking to join ${callName}`}</Title>
             <Line>The host will let you in.</Line>
             {consent}
@@ -71,6 +81,34 @@ export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Ele
           </>
         )}
         {state.kind === "joining" ? consent : null}
+      </View>
+    </View>
+  );
+}
+
+function Lobby({ participants }: { readonly participants: readonly LobbyParticipant[] }): React.JSX.Element {
+  const { shown, rest } = lobbyRoster(participants);
+  const parts = [...shown.map((participant) => ({ key: participant.displayName, text: participant.displayName, ai: participant.identityKind === "agent" })), ...(rest.length > 0 ? [{ key: "others", text: `${rest.length} others`, ai: false }] : [])];
+  return (
+    <View style={styles.lobby} testID="limbo.lobby">
+      <View style={styles.lobbyAvatars}>
+        {shown.slice(0, 3).map((participant, index) => (
+          <View key={`${participant.displayName}-${index}`} style={index === 0 ? undefined : styles.overlappedAvatar}>
+            <FaceAvatar name={participant.displayName} size={24} testID={`limbo.lobby.avatar.${index}`} />
+          </View>
+        ))}
+      </View>
+      <View style={styles.lobbyNames} testID="limbo.lobby.summary">
+        {parts.map((part, index) => (
+          <View key={part.key} style={styles.lobbyName}>
+            <ChalkText tone="textSoft" variant="label">
+              {index === 0 ? "" : index === parts.length - 1 ? " and " : ", "}
+              {part.text}
+            </ChalkText>
+            {part.ai ? <AIBadge testID={`limbo.lobby.ai.${part.key}`} /> : null}
+          </View>
+        ))}
+        <ChalkText tone="textSoft" variant="label">{` ${participants.length === 1 ? "is" : "are"} in this call`}</ChalkText>
       </View>
     </View>
   );
@@ -157,5 +195,10 @@ const styles = StyleSheet.create({
   consent: { flexDirection: "row", alignItems: "center", gap: space["1-5"], marginTop: space[1] },
   // `.consent` is 12 pt at the body weight.
   consentText: { fontFamily: fontFamilies[400], flexShrink: 1 },
+  lobby: { alignItems: "center", gap: space[2], marginBottom: space[1] },
+  lobbyNames: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
+  lobbyName: { flexDirection: "row", alignItems: "center", gap: space[1] },
+  lobbyAvatars: { flexDirection: "row", alignItems: "center", paddingLeft: space["1-5"] },
+  overlappedAvatar: { marginLeft: -space["1-5"] },
   spinner: { width: 18, height: 18, borderRadius: corners.pill, borderWidth: 2 },
 });

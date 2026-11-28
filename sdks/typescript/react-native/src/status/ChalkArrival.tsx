@@ -1,3 +1,4 @@
+import type { LobbyParticipant } from "@q9labsai/chalk-client";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useBackHandler } from "../frame/back-handler";
@@ -21,6 +22,8 @@ export type ChalkArrivalProps = {
   readonly onRetry: () => void;
   /** Recording consent shows while knocking on a recorded call. */
   readonly recording?: boolean;
+  /** Privacy-limited people already in the call, disclosed before joining. */
+  readonly participants?: readonly LobbyParticipant[];
 };
 
 /**
@@ -38,12 +41,12 @@ export function ChalkArrival({ colorScheme = "dark", ...props }: ChalkArrivalPro
   );
 }
 
-export function ArrivalScreen({ state, callName, onCancel, onRetry, recording = false }: Omit<ChalkArrivalProps, "colorScheme">): React.JSX.Element {
+export function ArrivalScreen({ state, callName, onCancel, onRetry, recording = false, participants = [] }: Omit<ChalkArrivalProps, "colorScheme">): React.JSX.Element {
   const { colors } = useTheme();
   useBackHandler(true, onCancel);
   return (
     <View style={[styles.screen, { backgroundColor: colors.canvas }]} testID="arrival.screen">
-      {state === "full" ? <StatusPage callName={callName} onHome={onCancel} onRejoin={onRetry} outcome="full" /> : <Limbo callName={callName} recording={recording} state={state === "knocking" ? { kind: "knocking", onCancel } : { kind: "refused", onAskAgain: onRetry }} />}
+      {state === "full" ? <StatusPage callName={callName} onHome={onCancel} onRejoin={onRetry} outcome="full" /> : <Limbo callName={callName} participants={participants} recording={recording} state={state === "knocking" ? { kind: "knocking", onCancel } : { kind: "refused", onAskAgain: onRetry }} />}
     </View>
   );
 }

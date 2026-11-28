@@ -1,5 +1,5 @@
 import type { PreJoinDevices } from "@q9labsai/chalk-react";
-import { cn, getParticipantAvatarGradient, getParticipantInitials, MediaGlyph } from "@q9labsai/chalk-react/utils";
+import { Avatar, cn, MediaGlyph } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, type ReactNode } from "react";
 
 /** A glass circle on the preview: the same off style as the call's dock, with an amber badge when the device is missing. */
@@ -49,21 +49,11 @@ export function PreviewTile({
       element.srcObject = null;
     };
   }, [cameraTrack]);
-  const granted = devices.access === "granted";
   const name = displayName.trim() || "You";
   return (
     <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] lg:w-[600px]">
       <video ref={video} autoPlay muted playsInline aria-hidden={!cameraTrack} className={cn("absolute inset-0 size-full object-cover", !cameraTrack && "hidden", dimmed && "opacity-35")} style={{ transform: devices.mirrored ? "scaleX(-1)" : undefined }} />
-      {cameraTrack ? null : (
-        <span
-          aria-hidden="true"
-          className={cn("absolute left-1/2 top-1/2 grid size-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-(length:--type-title) font-semibold text-[var(--chalk-on-overlay)]", dimmed && "opacity-35")}
-          style={{ background: getParticipantAvatarGradient(name) }}
-        >
-          {getParticipantInitials(name)}
-        </span>
-      )}
-      {granted ? <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-full bg-[var(--chalk-popover)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)]">Only you see this</span> : null}
+      {cameraTrack ? null : <Avatar name={name} size="2xl" className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2", dimmed && "opacity-35")} style={{ width: 112, height: 112 }} />}
       <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[var(--chalk-popover)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>
