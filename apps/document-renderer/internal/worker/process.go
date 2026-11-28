@@ -11,6 +11,7 @@ import (
 	"time"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
+	"github.com/q9labs/chalk/apps/document-renderer/internal/office"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 )
 
@@ -30,13 +31,17 @@ func Process(ctx context.Context, control controlplane.ControlClient, assignment
 		return err
 	}
 	stageLog(ctx, assignment, 0, "source_download", time.Since(downloadStarted), "bytes", len(source))
+	source, converted, err := prepareSource(ctx, source, &assignment)
+	if err != nil {
+		return reportFailure(ctx, control, assignment, err)
+	}
 	switch assignment.Kind {
 	case "inventory":
-		err = processInventory(ctx, control, assignment, source)
+		err = processInventory(ctx, control, assignment, source, converted)
 	case "pages":
-		err = processPages(ctx, control, assignment, source)
+		err = processPages(ctx, control, assignment, source, converted)
 	case "zoom":
-		err = processZoom(ctx, control, assignment, source)
+		err = processZoom(ctx, control, assignment, source, converted)
 	case "timeout-probe":
 		if os.Getenv("RENDERER_TIMEOUT_PROBE") != "1" {
 			err = fmt.Errorf("timeout probe is disabled")
@@ -53,14 +58,7 @@ func Process(ctx context.Context, control controlplane.ControlClient, assignment
 	default:
 		err = fmt.Errorf("unknown render job kind %q", assignment.Kind)
 	}
-	if err != nil {
-		var failure renderFailure
-		if errors.As(err, &failure) {
-			return finishFailure(ctx, control, assignment, failure.code, failure.err)
-		}
-		return err
-	}
-	return nil
+	return reportFailure(ctx, control, assignment, err)
 }
 
 type renderFailure struct {
@@ -79,7 +77,7 @@ func isolatedRenderFailure(err error) error {
 	return renderFailure{code: classifyIsolatedFailure(err), err: err}
 }
 
-func processInventory(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
+func processInventory(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte, converted bool) error {
 	sourcePath, cleanup, err := writeSource(source)
 	if err != nil {
 		return err
@@ -99,8 +97,8 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	if err != nil {
 		return err
 	}
-	if len(pageSpecs) > 300 {
-		return renderFailure{code: "too_many_pages", err: fmt.Errorf("document has %d pages", len(pageSpecs))}
+	if len(pageSpecs) > office.MaxPages {
+		return tooManyPages(len(pageSpecs), converted)
 	}
 	renderStarted := time.Now()
 	bitmap, width, height, err := renderIsolatedEagerPage(ctx, executable, sourcePath, assignment.MIMEType, 1)
@@ -122,7 +120,7 @@ func processInventory(ctx context.Context, control controlplane.ControlClient, a
 	return nil
 }
 
-func processPages(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
+func processPages(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte, converted bool) error {
 	if assignment.MIMEType != "application/pdf" {
 		return fmt.Errorf("image documents do not have page fanout jobs")
 	}
@@ -133,6 +131,9 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 	defer cleanup()
 	executable, err := os.Executable()
 	if err != nil {
+		return err
+	}
+	if err := verifyConvertedPages(ctx, converted, executable, sourcePath, lastUploadPage(assignment.Uploads)); err != nil {
 		return err
 	}
 	semaphore := make(chan struct{}, 2)
@@ -183,7 +184,7 @@ func processPages(ctx context.Context, control controlplane.ControlClient, assig
 	return nil
 }
 
-func processZoom(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte) error {
+func processZoom(ctx context.Context, control controlplane.ControlClient, assignment controlplane.Assignment, source []byte, converted bool) error {
 	if len(assignment.Uploads) != 1 {
 		return fmt.Errorf("zoom assignment does not name exactly one page")
 	}
@@ -198,6 +199,9 @@ func processZoom(ctx context.Context, control controlplane.ControlClient, assign
 	defer cleanup()
 	executable, err := os.Executable()
 	if err != nil {
+		return err
+	}
+	if err := verifyConvertedPages(ctx, converted, executable, sourcePath, target.Page); err != nil {
 		return err
 	}
 	renderStarted := time.Now()

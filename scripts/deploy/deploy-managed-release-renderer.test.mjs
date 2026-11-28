@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
-import { rendererBinding } from "./deploy-managed-release.mjs";
+import { rendererBinding, rendererImageBinding } from "./deploy-managed-release.mjs";
 
 test("renderer binding does not depend on dispatcher configuration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "renderer-binding-"));
@@ -63,6 +63,38 @@ test("production renderer binding is skipped until bootstrap is explicitly decla
     assert.equal(result.action, "renderer-not-declared");
     assert.equal(result.left_live, true);
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("renderer image binding is skipped until its own declaration, whatever the ZIP declaration says", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "renderer-image-binding-"));
+  try {
+    await writeFile(join(directory, "release.json"), "{}");
+    await writeFile(join(directory, "release.media.json"), "{}");
+    process.env.CHALK_RENDERER_RELEASE_ENABLED = "true";
+    delete process.env.CHALK_RENDERER_IMAGE_RELEASE_ENABLED;
+    const options = { manifestPath: join(directory, "release.json"), environment: "production", region: "ap-southeast-1" };
+    const commandRunner = async () => {
+      throw new Error("an undeclared renderer image must not invoke state preflight");
+    };
+    assert.equal((await rendererImageBinding({ commandRunner, options, dryRun: true })).action, "renderer-image-not-declared");
+    assert.equal((await rendererImageBinding({ commandRunner, options: { ...options, environment: "nightly" }, dryRun: true })).action, "renderer-image-not-production-target");
+    process.env.CHALK_RENDERER_IMAGE_RELEASE_ENABLED = "true";
+    const calls = [];
+    const result = await rendererImageBinding({
+      commandRunner: async ({ args }) => {
+        calls.push(args);
+        return { stdout: JSON.stringify({ action: "renderer-image-not-bootstrapped", verified: false }) };
+      },
+      options,
+      dryRun: true,
+    });
+    assert.equal(result.action, "renderer-image-not-bootstrapped");
+    assert.ok(calls[0].includes("deploy_renderer_image") && calls[0].includes("--dry-run"));
+  } finally {
+    delete process.env.CHALK_RENDERER_RELEASE_ENABLED;
+    delete process.env.CHALK_RENDERER_IMAGE_RELEASE_ENABLED;
     await rm(directory, { recursive: true, force: true });
   }
 });

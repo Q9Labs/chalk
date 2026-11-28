@@ -14,6 +14,7 @@ import (
 	"time"
 
 	controlplane "github.com/q9labs/chalk/apps/document-renderer/internal/control"
+	"github.com/q9labs/chalk/apps/document-renderer/internal/office"
 	"github.com/q9labs/chalk/apps/document-renderer/internal/render"
 )
 
@@ -137,7 +138,11 @@ func closePipe(pipe *os.File) {
 }
 
 func runIsolatedChild(ctx context.Context, executable, mode string, args ...string) error {
-	childCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	return runIsolatedChildWithTimeout(ctx, 20*time.Second, executable, mode, args...)
+}
+
+func runIsolatedChildWithTimeout(ctx context.Context, timeout time.Duration, executable, mode string, args ...string) error {
+	childCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	environment := isolatedChildEnvironment(mode)
 	command := exec.Command(executable, args...)
@@ -228,6 +233,10 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 		if strings.Contains(message, "renderer sandbox setup failed") {
 			return isolatedSandboxError{err: fmt.Errorf("isolated %s render sandbox setup failed: %s", mode, message)}
 		}
+		// A rejection made from the file's container alone never ran a parser, so there is no renderer state to recycle.
+		if office.IsPrecheckFailure(message) {
+			return fmt.Errorf("isolated %s render failed: %s", mode, message)
+		}
 		if message == "" {
 			return isolatedChildCompromiseError{err: fmt.Errorf("isolated %s render failed: %w", mode, waitErr)}
 		}
@@ -238,6 +247,9 @@ func runIsolatedChild(ctx context.Context, executable, mode string, args ...stri
 
 func classifyIsolatedFailure(err error) string {
 	message := err.Error()
+	if code, ok := office.CodeFromMessage(message); ok {
+		return code
+	}
 	if strings.Contains(message, "password") || strings.Contains(message, "pdfium error 4") {
 		return "password_protected"
 	}

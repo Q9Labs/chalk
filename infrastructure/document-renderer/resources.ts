@@ -1,9 +1,10 @@
+// fallow-ignore-file code-duplication -- the renderer and the dispatcher declare the same Lambda, role and log-group resources by design; a shared builder would couple two stacks that release independently.
 import type * as AWS from "@alchemy.run/aws";
 import type { PolicyDocument, PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import * as Redacted from "effect/Redacted";
 import { buildEnvironment } from "./environment.ts";
 import type { FunctionProps } from "../providers/aws-versioned-function.ts";
-import type { DocumentRendererInputs } from "./config.ts";
+import { imageUri, isImageInputs, type DocumentRendererInputs } from "./config.ts";
 
 const policy = (Statement: PolicyStatement[]): PolicyDocument => ({ Version: "2012-10-17", Statement });
 const allow = (Sid: string, Action: string[], Resource: string[]): PolicyStatement => ({ Sid, Effect: "Allow", Action, Resource });
@@ -24,10 +25,9 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
     functionName: input.function_name,
     description: `Presenting document renderer (${input.release_id})`,
     role: roleArn("execution"),
-    runtime: "provided.al2023",
-    handler: "bootstrap",
+    ...(isImageInputs(input) ? {} : { runtime: "provided.al2023" as const, handler: "bootstrap" }),
     architectures: ["arm64"],
-    code: { bucket: input.artifact_s3_bucket, key: input.artifact_s3_key, version: input.artifact_s3_object_version, sha256: input.artifact_sha256_base64 },
+    code: isImageInputs(input) ? { imageUri: imageUri(input) } : { bucket: input.artifact_s3_bucket, key: input.artifact_s3_key, version: input.artifact_s3_object_version, sha256: input.artifact_sha256_base64 },
     timeout: input.timeout_seconds,
     memorySize: input.memory_size,
     reservedConcurrency: input.reserved_concurrency,
@@ -78,7 +78,7 @@ export const resourceProps = (input: DocumentRendererInputs, account: string, re
       required_egress_destinations: ["control-api", "job-scoped-presigned-object-storage"].sort(),
       control_api_invoke_policy_json: JSON.stringify(policy([allow("InvokeDocumentRendererOnly", ["lambda:InvokeFunction"], [functionArn])])),
       log_group_name: logName,
-      artifact_identity: { bucket: input.artifact_s3_bucket, key: input.artifact_s3_key, version: input.artifact_s3_object_version, sha256: input.artifact_sha256 },
+      ...(isImageInputs(input) ? { image_identity: { repository: input.image_repository_uri, digest: input.image_digest } } : { artifact_identity: { bucket: input.artifact_s3_bucket, key: input.artifact_s3_key, version: input.artifact_s3_object_version, sha256: input.artifact_sha256 } }),
       release_identity: { release_id: input.release_id, release_manifest_digest: input.release_manifest_digest, config_digest: input.config_digest },
     },
   };

@@ -864,6 +864,16 @@
       "sample": "No audit sample yet; the job is new on this branch."
     },
     {
+      "id": "workflow:ci.yml#build-renderer-image",
+      "owner": "Release chain",
+      "catches": "Document-renderer container image that does not build, is not a single arm64 manifest, or does not match its manifest.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0,
+      "record": "unmeasured",
+      "sample": "No audit sample yet; the job is new on this branch and skips unless the renderer image release is declared."
+    },
+    {
       "id": "workflow:ci.yml#publish-managed-manifest",
       "owner": "Release chain",
       "catches": "A release manifest that cannot be published, so no deploy can start.",

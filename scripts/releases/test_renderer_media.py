@@ -120,5 +120,125 @@ class RendererMediaTest(unittest.TestCase):
         self.assertNotIn('document-renderer/release-old', encoded)
 
 
+IMAGE = {'repository_uri': '123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-document-renderer', 'digest': 'sha256:' + 'f' * 64}
+
+
+def image_members():
+    return {**member_files(), 'renderer_image': dict(IMAGE)}
+
+
+def image_inputs():
+    return {'function_name': 'chalk-production-document-renderer-image', 'environment_name': 'production', 'package_type': 'image',
+            'image_repository_uri': IMAGE['repository_uri'], 'image_digest': 'sha256:' + '1' * 64, 'release_id': 'release-prev', 'release_manifest_digest': 'sha256:' + '2' * 64}
+
+
+def oci_archive(directory, manifests):
+    path = Path(directory) / 'image.oci.tar'
+    import tarfile
+    data = json.dumps({'schemaVersion': 2, 'manifests': manifests}).encode()
+    with tarfile.open(path, 'w') as tar:
+        info = tarfile.TarInfo('index.json')
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+    return path
+
+
+class RendererImageMediaTest(unittest.TestCase):
+    def run_deploy(self, args, provider=object()):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            renderer_media.deploy_renderer_image(args, provider)
+        return json.loads(stdout.getvalue())
+
+    def test_members_without_an_image_leave_it_idle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_deploy(args_for(directory, member_files()))
+        self.assertEqual(result['action'], 'renderer-image-not-recorded')
+        self.assertIs(result['left_live'], True)
+
+    def test_image_needs_its_own_declaration_and_production(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = args_for(directory, image_members())
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_RELEASE_ENABLED': 'true'}, clear=True), mock.patch.object(renderer_media, 'renderer_inputs', side_effect=AssertionError('state was read')):
+                self.assertEqual(self.run_deploy(args)['action'], 'renderer-image-not-declared')
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), mock.patch.object(renderer_media, 'renderer_inputs', side_effect=AssertionError('state was read')):
+                args.environment = 'nightly'
+                self.assertEqual(self.run_deploy(args)['action'], 'renderer-image-not-production-target')
+
+    def test_missing_image_state_skips_before_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), mock.patch.object(renderer_media, 'renderer_inputs', side_effect=ValueError('Document renderer has no Alchemy state')) as read:
+                result = self.run_deploy(args_for(directory, image_members()))
+        read.assert_called_once()
+        self.assertEqual(read.call_args.args[1], 'image')
+        self.assertEqual(result['action'], 'renderer-image-not-bootstrapped')
+
+    def test_release_deploys_recorded_digest_and_verifies_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = args_for(directory, image_members())
+            args.dry_run = False
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), \
+                 mock.patch.object(renderer_media, 'renderer_inputs', return_value=image_inputs()), \
+                 mock.patch.object(renderer_media, 'ecr_image_exists', return_value=True), \
+                 mock.patch.object(renderer_media, 'renderer_release_environment', return_value={'CHALK_RELEASE_ID': 'release-prev'}), \
+                 mock.patch.object(renderer_media, 'run_renderer_plan') as plan, \
+                 mock.patch.object(renderer_media, 'verify_renderer', return_value={'release_id': 'release-old', 'verified': True}):
+                result = self.run_deploy(args)
+        planned = plan.call_args.args[1]
+        self.assertEqual(planned['image_digest'], IMAGE['digest'])
+        self.assertEqual(planned['release_id'], 'release-old')
+        self.assertEqual(plan.call_args.args[2], 'release')
+        self.assertEqual(result['image_digest'], IMAGE['digest'])
+
+    def test_rollback_to_a_previous_digest_uses_the_same_path(self):
+        previous = {'repository_uri': IMAGE['repository_uri'], 'digest': 'sha256:' + '1' * 64}
+        with tempfile.TemporaryDirectory() as directory:
+            args = args_for(directory, {**member_files(), 'renderer_image': previous})
+            args.dry_run = False
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), \
+                 mock.patch.object(renderer_media, 'renderer_inputs', return_value={**image_inputs(), 'image_digest': IMAGE['digest']}), \
+                 mock.patch.object(renderer_media, 'ecr_image_exists', return_value=True), \
+                 mock.patch.object(renderer_media, 'renderer_release_environment', return_value={}), \
+                 mock.patch.object(renderer_media, 'run_renderer_plan') as plan, \
+                 mock.patch.object(renderer_media, 'verify_renderer', return_value={'verified': True}):
+                self.run_deploy(args)
+        self.assertEqual(plan.call_args.args[1]['image_digest'], previous['digest'])
+
+    def test_missing_ecr_image_is_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = args_for(directory, image_members())
+            args.dry_run = False
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), \
+                 mock.patch.object(renderer_media, 'renderer_inputs', return_value=image_inputs()), \
+                 mock.patch.object(renderer_media, 'ecr_image_exists', return_value=False), \
+                 mock.patch.object(renderer_media, 'run_renderer_plan') as plan:
+                with self.assertRaises(ValueError):
+                    self.run_deploy(args)
+        plan.assert_not_called()
+
+    def test_foreign_repository_is_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = args_for(directory, image_members())
+            with mock.patch.dict(os.environ, {'CHALK_RENDERER_IMAGE_RELEASE_ENABLED': 'true'}, clear=True), \
+                 mock.patch.object(renderer_media, 'renderer_inputs', return_value={**image_inputs(), 'image_repository_uri': '123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/other'}):
+                with self.assertRaises(ValueError):
+                    self.run_deploy(args)
+
+    def test_image_archive_must_hold_exactly_one_image_manifest(self):
+        manifest = {'mediaType': 'application/vnd.oci.image.manifest.v1+json', 'digest': 'sha256:' + 'a' * 64}
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(renderer_media.oci_manifest_digest(oci_archive(directory, [manifest])), manifest['digest'])
+            with self.assertRaises(ValueError):
+                renderer_media.oci_manifest_digest(oci_archive(directory, [{**manifest, 'mediaType': 'application/vnd.oci.image.index.v1+json'}]))
+            with self.assertRaises(ValueError):
+                renderer_media.oci_manifest_digest(oci_archive(directory, [manifest, manifest]))
+
+    def test_members_reject_tag_or_malformed_image_identity(self):
+        with self.assertRaises(ValueError):
+            renderer_media.validate_members({**member_files(), 'renderer_image': {**IMAGE, 'digest': 'latest'}})
+        with self.assertRaises(ValueError):
+            renderer_media.validate_members({**member_files(), 'renderer_image': {**IMAGE, 'repository_uri': 'ghcr.io/q9labs/renderer'}})
+
+
 if __name__ == '__main__':
     unittest.main()

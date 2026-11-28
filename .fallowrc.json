@@ -107,6 +107,7 @@
     "infrastructure/migration/seed.ts",
     "infrastructure/releases/driver.ts",
     "infrastructure/releases/renderer-driver.ts",
+    "infrastructure/releases/renderer-image-driver.ts",
     "infrastructure/releases/deploy.ts",
     "infrastructure/releases/destroy-stage.ts",
     "infrastructure/releases/prove-dispatcher.ts",

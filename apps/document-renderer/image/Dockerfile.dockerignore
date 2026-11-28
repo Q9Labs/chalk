@@ -1,0 +1,6 @@
+native
+**/*_test.go
+testdata
+image
+office
+!office/office_convert.py

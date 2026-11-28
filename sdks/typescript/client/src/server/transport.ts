@@ -1,14 +1,16 @@
 import { ChalkAPIError, errorCode, requestId } from "./errors.js";
 import { MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "../urls.js";
-import type { ChalkIdempotencyOptions, ChalkServerClientOptions } from "./types.js";
+import type { ChalkIdempotencyOptions, ChalkServerClientOptions, ChalkServerHeaders } from "./types.js";
 
 type RetryMode = "never" | "always" | "caller_idempotency";
 export type ServerRequest = {
   readonly body?: unknown;
   readonly expectedStatus: number;
+  readonly headers?: ChalkServerHeaders;
   readonly idempotency?: ChalkIdempotencyOptions;
-  readonly method: "DELETE" | "GET" | "PATCH" | "POST";
+  readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
   readonly path: string;
+  readonly response?: "text";
   readonly retry: RetryMode;
 };
 
@@ -43,7 +45,7 @@ export function createServerRequester(options: ChalkServerClientOptions, apiKey:
 
 async function performAttempt<T>(attempt: Attempt, index: number): Promise<T> {
   const response = await fetchAttempt(attempt, index);
-  if (response.status === attempt.input.expectedStatus) return decodeSuccess<T>(response);
+  if (response.status === attempt.input.expectedStatus) return decodeSuccess<T>(response, attempt.input.response);
   if (canRetryResponse(response, attempt.retries, index)) return retryResponse<T>(response, attempt, index);
   throw await responseError(response, attempt.input.retry !== "never");
 }
@@ -68,10 +70,10 @@ async function retryResponse<T>(response: Response, attempt: Attempt, index: num
   return performAttempt<T>(attempt, index + 1);
 }
 
-async function decodeSuccess<T>(response: Response): Promise<T> {
+async function decodeSuccess<T>(response: Response, mode: ServerRequest["response"]): Promise<T> {
   if (response.status === 204) return undefined as T;
   try {
-    return (await response.json()) as T;
+    return (await (mode === "text" ? response.text() : response.json())) as T;
   } catch {
     throw new ChalkAPIError({ code: "invalid_response", requestId: requestId(response.headers), retryable: false, status: response.status });
   }
@@ -89,7 +91,7 @@ function requestURL(attempt: Attempt): URL {
 function requestInit(attempt: Attempt): RequestInit {
   return {
     method: attempt.input.method,
-    headers: requestHeaders(attempt.options, attempt.apiKey, attempt.input.body !== undefined, attempt.idempotencyKey),
+    headers: requestHeaders(attempt),
     ...serializedBody(attempt.input.body),
   };
 }
@@ -99,11 +101,12 @@ function serializedBody(body: unknown): { readonly body?: string } {
   return { body: JSON.stringify(body) };
 }
 
-function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBody: boolean, idempotencyKeyValue: string | undefined): Headers {
-  const headers = new Headers(options.headers);
-  if (hasBody) headers.set("content-type", "application/json");
-  if (idempotencyKeyValue !== undefined) headers.set("idempotency-key", idempotencyKeyValue);
-  headers.set("authorization", `Bearer ${apiKey}`);
+function requestHeaders(attempt: Attempt): Headers {
+  const headers = new Headers(attempt.options.headers);
+  for (const [name, value] of Object.entries(attempt.input.headers ?? {})) headers.set(name, value);
+  if (attempt.input.body !== undefined) headers.set("content-type", "application/json");
+  if (attempt.idempotencyKey !== undefined) headers.set("idempotency-key", attempt.idempotencyKey);
+  headers.set("authorization", `Bearer ${attempt.apiKey}`);
   // The API binds an Episode to the Chalk SFU only for an SDK that declares it.
   headers.set(MEDIA_PROVIDERS_HEADER, MEDIA_PROVIDERS);
   return headers;

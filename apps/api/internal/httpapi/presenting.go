@@ -25,6 +25,7 @@ type PresentingService interface {
 	Create(context.Context, presenting.Subject, utilities.ID) (presenting.Document, error)
 	Manifest(context.Context, presenting.Subject, utilities.ID) (presenting.Document, []presenting.Page, error)
 	Zoom(context.Context, presenting.Subject, utilities.ID, int) (string, time.Time, error)
+	AcceptedFormatIDs() []string
 	ClaimRender(context.Context, presenting.RenderCapability) (presenting.ControlAssignment, bool, error)
 	HeartbeatRender(context.Context, presenting.RenderLease) error
 	CompleteInventory(context.Context, presenting.InventoryReport) error
@@ -72,6 +73,11 @@ type presentingManifestResponse struct {
 	PageCount    int                        `json:"pageCount,omitempty"`
 	Pages        []presentingPageResponse   `json:"pages"`
 }
+type presentingFormatsRequest struct{}
+type presentingFormatsResponse struct {
+	Formats []string `json:"formats"`
+}
+
 type presentingZoomResponse struct {
 	ImageURL  string `json:"imageUrl"`
 	ExpiresAt string `json:"expiresAt"`
@@ -84,6 +90,7 @@ func presentingEndpoints(service PresentingService, verifier ChatParticipantVeri
 		createPresentingDocumentEndpoint(service).Middleware(auth, feature),
 		getPresentingDocumentEndpoint(service).Middleware(auth, feature),
 		getPresentingZoomEndpoint(service).Middleware(auth, feature),
+		getPresentingFormatsEndpoint(service).Middleware(auth, feature),
 	}
 }
 
@@ -160,6 +167,17 @@ func getPresentingZoomEndpoint(service PresentingService) Endpoint[presentingZoo
 		Errors(presentingErrors()...).ErrorRules(presentingRules)
 }
 
+func getPresentingFormatsEndpoint(service PresentingService) Endpoint[presentingFormatsRequest, presentingFormatsResponse] {
+	return Get("/v1/presenting/formats", "getPresentingFormats",
+		func(*http.Request) (presentingFormatsRequest, error) { return presentingFormatsRequest{}, nil },
+		func(context.Context, presentingFormatsRequest) (presentingFormatsResponse, error) {
+			return presentingFormatsResponse{Formats: service.AcceptedFormatIDs()}, nil
+		}).
+		Needs(service).Auth(APIAuthParticipantSync).
+		Responds(http.StatusOK, "PresentingFormats", presentingFormatsResponse{}).
+		Errors(presentingErrors()...).ErrorRules(presentingRules)
+}
+
 func decodeCreatePresentingDocumentRequest(request *http.Request) (createPresentingDocumentRequest, error) {
 	body, err := decodeJSONBody[createPresentingDocumentBody](request)
 	return createPresentingDocumentRequest{Body: body}, err
@@ -196,7 +214,7 @@ func presentingManifest(document presenting.Document, pages []presenting.Page) p
 		Status: document.Status, PageCount: document.PageCount, Pages: make([]presentingPageResponse, 0, len(pages)),
 	}
 	if document.Failure != nil {
-		response.Failure = &presentingFailureResponse{Code: document.Failure.Code, Message: document.Failure.Message}
+		response.Failure = &presentingFailureResponse{Code: document.Failure.Code, Message: presenting.FailureMessage(document.Failure.Code, document.Failure.Message)}
 	}
 	for _, page := range pages {
 		response.Pages = append(response.Pages, presentingPageResponse{Page: page.Page, Width: page.Width, Height: page.Height, Status: page.Status, ImageURL: page.ImageURL, ThumbnailURL: page.ThumbnailURL})

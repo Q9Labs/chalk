@@ -854,7 +854,9 @@
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "application/vnd.oasis.opendocument.text",
       "application/vnd.oasis.opendocument.spreadsheet",
-      "application/vnd.oasis.opendocument.presentation"
+      "application/vnd.oasis.opendocument.presentation",
+      "application/vnd.apple.keynote",
+      "application/x-iwork-keynote-sffkey"
     ],
     "chatCursor": {
       "exactFields": ["after_sequence", "retained_floor_sequence"],

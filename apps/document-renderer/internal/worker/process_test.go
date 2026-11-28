@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	if mode := os.Getenv("RENDER_CHILD_MODE"); mode == "inventory" || mode == "page" || mode == "image" || mode == "timeout-probe" {
+	if mode := os.Getenv("RENDER_CHILD_MODE"); mode == "inventory" || mode == "page" || mode == "image" || mode == "timeout-probe" || mode == "office" {
 		os.Exit(render.RunChild(mode, os.Args[1:]))
 	}
 }
