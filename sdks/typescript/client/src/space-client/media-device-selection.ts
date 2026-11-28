@@ -24,6 +24,14 @@ export class MediaDeviceSelection implements ConnectionMediaDevices {
     this.#devices.releaseTrack(track);
   }
 
+  allowRetry(): void {
+    this.#devices.allowRetry?.();
+  }
+
+  allowRetryWhen(enabled: boolean): void {
+    if (enabled) this.allowRetry();
+  }
+
   enumerateDevices(): Promise<readonly MediaDeviceInfo[]> {
     return this.#devices.enumerateDevices?.() ?? Promise.resolve([]);
   }

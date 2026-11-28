@@ -10,7 +10,7 @@ import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } 
 import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./initial-media";
-import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode, mediaIceFailureField, mediaRefusalField } from "./lifecycle-failure";
+import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode, mediaDeviceFields, mediaIceFailureField, mediaRefusalField } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { episodeNoLongerActive, mediaAccessRejected, sfuAccessRejected } from "./access-rejection";
@@ -19,7 +19,6 @@ import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
-import { deviceFailedEvent } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -566,10 +565,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
-            const captured = yield* trace(
-              "acquire_initial_media",
-              acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, (source, cause) => telemetry?.record(deviceFailedEvent(cause, source))),
-            );
+            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, telemetry));
             const capturedStream = captured.stream;
             stream = capturedStream;
             grantedMedia = grantedMediaFromStream(capturedStream);
@@ -1263,6 +1259,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           Effect.suspend(() => {
             if (model.state === "live") return Effect.void;
             if (joinDeferred) return Deferred.await(joinDeferred);
+            platform.mediaDevices.allowRetry?.();
             return Effect.gen(function* () {
               const deferred = yield* Deferred.make<void, ConnectionLifecycleFailure>();
               model.joinCancelled = false;
@@ -1365,7 +1362,7 @@ function joinCancelledFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaRefusalField(value.cause), ...mediaIceFailureField(value.cause) });
+  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}), ...mediaDeviceFields(value), ...mediaRefusalField(value.cause), ...mediaIceFailureField(value.cause) });
 }
 function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
   return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));

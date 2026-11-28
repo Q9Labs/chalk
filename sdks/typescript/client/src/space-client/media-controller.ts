@@ -238,7 +238,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#publish();
     }).pipe(Effect.andThen(this.#set("microphone", enabled)));
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
-  captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
+  captureCameraPreview = (): ClientEffect<CameraPreview> => Effect.sync(() => this.#selection.allowRetry()).pipe(Effect.andThen(this.#cameraSource("preview")), Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
     Effect.suspend(() => {
@@ -445,7 +445,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" || this.#replacingMediaConnection() ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+    return Effect.sync(() => this.#selection.allowRetryWhen(enabled)).pipe(Effect.andThen(Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" || this.#replacingMediaConnection() ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))))));
   }
   /** Sync is live and only the media connection is being replaced, e.g. while another source moves to a fresh SFU connection. */
   #replacingMediaConnection(): boolean {

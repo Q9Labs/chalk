@@ -12,11 +12,11 @@ export function browserPorts(): DevicePorts {
     get mediaDevices() {
       return navigator.mediaDevices;
     },
-    get window() {
-      return window;
-    },
     get userAgent() {
       return navigator.userAgent;
+    },
+    get touchPoints() {
+      return navigator.maxTouchPoints;
     },
   };
 }
@@ -58,16 +58,22 @@ export async function readPermission(ports: DevicePorts, device: "microphone" | 
 /**
  * The card for one failure, or null when nothing should show.
  * A refusal while the browser says "granted" can only come from the operating system, and so can Chrome's "Permission denied by system".
- * A screen refusal without that signal is the person cancelling the browser picker.
+ * A screen refusal without that signal is the person closing the browser picker, which a new attempt can fix. Phones have no screen share to refuse.
  */
 /** Only for failures `isDeviceAccessFailure` accepts; the store checks that before it loads this file. */
 export function deviceAccessReason(failure: ClientFailure, device: DeviceKind, environment: AccessEnvironment): DeviceAccessReason | null {
-  if (failure.code === "media.device_busy") return { kind: "busy" };
+  const { browser, platform } = environment;
+  if (failure.code === "media.device_busy") return { kind: "busy", platform };
   if (failure.code === "media.device_not_found") return { kind: "missing" };
+  if (failure.code === "media.device_constraint_invalid") return { kind: "unavailable" };
   const system = failure.permissionBlock === "system" || (device !== "screen" && environment.permission === "granted");
-  if (device === "screen") return system && environment.platform === "mac" ? { kind: "blocked-system", platform: "mac", browser: environment.browser } : null;
-  if (system && environment.platform !== "other") return { kind: "blocked-system", platform: environment.platform, browser: environment.browser };
-  return { kind: "blocked-browser", browser: environment.browser };
+  if (device === "screen") {
+    if (platform === "ios" || platform === "android") return null;
+    return system && platform === "mac" ? { kind: "blocked-system", platform, browser } : { kind: "screen-declined" };
+  }
+  if (platform === "ios") return browser === "safari" ? { kind: "blocked-browser", browser, platform } : { kind: "blocked-app", browser };
+  if (system && (platform === "mac" || platform === "windows" || platform === "android")) return { kind: "blocked-system", platform, browser };
+  return { kind: "blocked-browser", browser, platform };
 }
 
 export function detectBrowser(userAgent: string): BrowserName {
@@ -77,9 +83,10 @@ export function detectBrowser(userAgent: string): BrowserName {
   return "chrome";
 }
 
-export function detectPlatform(userAgent: string): Platform {
-  if (/iPhone|iPad|iPod|Android/.test(userAgent)) return "other";
-  if (/Macintosh|Mac OS X/.test(userAgent)) return "mac";
+export function detectPlatform(userAgent: string, touchPoints = 0): Platform {
+  if (/iPhone|iPad|iPod/.test(userAgent)) return "ios";
+  if (/Android/.test(userAgent)) return "android";
+  if (/Macintosh|Mac OS X/.test(userAgent)) return touchPoints > 1 ? "ios" : "mac";
   if (/Windows/.test(userAgent)) return "windows";
   return "other";
 }
@@ -92,21 +99,17 @@ const LOOK_WINDOW_MS = 10_000;
 
 /**
  * Calls `recovered` when the cause of a blocked device has probably gone away, so the failed command can run again without a click.
- * The browser setting fires a permission change, a plugged-in device fires devicechange, and a Mac setting only shows when the person comes back to the tab.
+ * The browser setting fires a permission change and a plugged-in device fires devicechange. A system setting fires neither, so the person retries it with a click; a window focus event is not a fix and would repeat the refusal.
  */
 export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: DeviceAccessReason, observed: PermissionAnswer, recovered: () => void): () => void {
   if (device === "screen") return () => {};
-  if (reason.kind === "blocked-browser") {
+  if (reason.kind === "blocked-browser" || reason.kind === "blocked-app") {
     // `observed` is the answer when the capture failed. Moving to "granted" from anything else counts, even if it happened before this watch began. A refusal with the permission already granted would retry forever.
     let before = observed;
     return watchPermission(ports, device, (answer) => {
       if (answer === "granted" && before !== "granted") recovered();
       before = answer;
     });
-  }
-  if (reason.kind === "blocked-system") {
-    ports.window.addEventListener("focus", recovered);
-    return () => ports.window.removeEventListener("focus", recovered);
   }
   if (reason.kind !== "missing" || !ports.mediaDevices) return () => {};
   const mediaDevices = ports.mediaDevices;
@@ -141,6 +144,6 @@ export interface ResolvedAccess {
 export async function resolveAccess(given: DevicePorts | undefined, device: DeviceKind, failure: ClientFailure): Promise<ResolvedAccess | null> {
   const ports = given ?? browserPorts();
   const permission = device === "screen" ? "unknown" : await readPermission(ports, device);
-  const reason = deviceAccessReason(failure, device, { browser: detectBrowser(ports.userAgent), platform: detectPlatform(ports.userAgent), permission });
+  const reason = deviceAccessReason(failure, device, { browser: detectBrowser(ports.userAgent), platform: detectPlatform(ports.userAgent, ports.touchPoints), permission });
   return reason && { reason, label: accessTooltip(device, reason), watch: (recovered) => watchRecovery(ports, device, reason, permission, recovered) };
 }

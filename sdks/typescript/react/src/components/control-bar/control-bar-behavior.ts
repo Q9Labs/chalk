@@ -11,9 +11,10 @@ import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, usePart
 import { NO_DETECTED_DEVICES, watchMediaDevices } from "../../internal/media-devices";
 import { playSpeakerTestTone } from "../../internal/speaker-test";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { useDeviceAccess } from "../device-access/useDeviceAccess";
+import { useJoinRefusals } from "../device-access/useJoinRefusals";
 import type { DeviceKind } from "../device-access/model";
+import { deviceAccessControls } from "./device-access-controls";
 
 export type { MediaDevice } from "./control-bar-devices";
 export type { ControlBarButtonName, ControlBarSurfaceProps } from "./control-bar-props";
@@ -105,7 +106,8 @@ export function useConnectedControlBarBehavior(props: ConnectedControlBarProps):
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageRecording = useCan("manageRecording");
-  const live = useConnection().status === "live";
+  const connection = useConnection();
+  const live = connection.status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
   const microphoneTarget = mediaToggleTarget(media.local.microphone.state, live);
@@ -143,6 +145,9 @@ export function useConnectedControlBarBehavior(props: ConnectedControlBarProps):
     [props.onCommandError, access.store],
   );
 
+  const turnOnAfterJoin = useCallback((device: "microphone" | "camera") => run(() => (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)), device, "start"), [run, client]);
+  useJoinRefusals(access.store, connection.lastError, turnOnAfterJoin);
+
   const leave = useCallback(() => {
     if (props.onLeaveRequest) {
       props.onLeaveRequest();
@@ -168,12 +173,7 @@ export function useConnectedControlBarBehavior(props: ConnectedControlBarProps):
   const videoInputDevices: MediaDevice[] = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" }));
   const toggleMicrophone = microphoneTarget === undefined ? undefined : () => void run(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop");
   const toggleCamera = cameraTarget === undefined ? undefined : () => void run(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop");
-  const deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>> = {};
-  for (const device of ["microphone", "camera", "screen"] as const) {
-    const issue = access.snapshot.issues[device];
-    if (!issue || media.local[device].state === "enabled") continue;
-    deviceAccess[device] = { ...issue, onOpenChange: (open) => access.store.setOpen(device, open), onRetry: () => void access.store.retry(device) };
-  }
+  const deviceAccess = deviceAccessControls({ access, media, client, run });
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
     detectDevices: false,

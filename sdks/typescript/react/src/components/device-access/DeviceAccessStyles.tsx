@@ -127,7 +127,9 @@ const DEVICE_ACCESS_CSS = `
   font-size: var(--type-caption);
   color: var(--chalk-muted-text);
 }
-.chalk-access-bar .icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--chalk-text); flex: none; }
+.chalk-access-bar .icon { min-width: 22px; height: 22px; padding: 0 var(--space-1); border-radius: var(--corner-pill); display: grid; place-items: center; color: var(--chalk-text); font-weight: 600; flex: none; }
+.chalk-access-note { font-size: var(--type-caption); color: var(--chalk-muted-text); padding: 0 var(--space-2) var(--space-1); line-height: 1.4; }
+.chalk-access-note[data-bad] { color: var(--chalk-danger-text); }
 .chalk-access-bar .icon[data-hit] { outline: 2px solid var(--chalk-text); }
 .chalk-access-bar .icon[data-off] { color: var(--chalk-danger-text); }
 .chalk-access-bar .icon svg { width: 14px; height: 14px; }
