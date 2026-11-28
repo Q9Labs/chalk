@@ -12,9 +12,6 @@ export function browserPorts(): DevicePorts {
     get mediaDevices() {
       return navigator.mediaDevices;
     },
-    get window() {
-      return window;
-    },
     get userAgent() {
       return navigator.userAgent;
     },
@@ -92,7 +89,7 @@ const LOOK_WINDOW_MS = 10_000;
 
 /**
  * Calls `recovered` when the cause of a blocked device has probably gone away, so the failed command can run again without a click.
- * The browser setting fires a permission change, a plugged-in device fires devicechange, and a Mac setting only shows when the person comes back to the tab.
+ * The browser setting fires a permission change and a plugged-in device fires devicechange. A system setting fires neither, so the person retries it with a click; a window focus event is not a fix and would repeat the refusal.
  */
 export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: DeviceAccessReason, observed: PermissionAnswer, recovered: () => void): () => void {
   if (device === "screen") return () => {};
@@ -103,10 +100,6 @@ export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: De
       if (answer === "granted" && before !== "granted") recovered();
       before = answer;
     });
-  }
-  if (reason.kind === "blocked-system") {
-    ports.window.addEventListener("focus", recovered);
-    return () => ports.window.removeEventListener("focus", recovered);
   }
   if (reason.kind !== "missing" || !ports.mediaDevices) return () => {};
   const mediaDevices = ports.mediaDevices;

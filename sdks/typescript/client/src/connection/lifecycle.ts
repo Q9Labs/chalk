@@ -19,7 +19,7 @@ import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
-import { deviceFailedEvent } from "../media/capture-error";
+import { recordDeviceFailure } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -568,7 +568,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
             const captured = yield* trace(
               "acquire_initial_media",
-              acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, (source, cause) => telemetry?.record(deviceFailedEvent(cause, source))),
+              acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, (source, cause) => recordDeviceFailure(telemetry, cause, source)),
             );
             const capturedStream = captured.stream;
             stream = capturedStream;
@@ -1263,6 +1263,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           Effect.suspend(() => {
             if (model.state === "live") return Effect.void;
             if (joinDeferred) return Deferred.await(joinDeferred);
+            platform.mediaDevices.allowRetry?.();
             return Effect.gen(function* () {
               const deferred = yield* Deferred.make<void, ConnectionLifecycleFailure>();
               model.joinCancelled = false;

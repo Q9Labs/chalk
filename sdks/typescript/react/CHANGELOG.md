@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The device-access card no longer retries a blocked microphone or camera when the window regains focus. A system setting that changed is retried from the card's button, and a browser permission that changed is still retried by itself.
+
 ## 6.1.0
 
 - Show each participant's device: a bottom-right badge on tiles for phones, tablets and foldables, and the device under every name in the People panel.

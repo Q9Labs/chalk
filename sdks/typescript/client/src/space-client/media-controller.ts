@@ -233,12 +233,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
   };
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> =>
     Effect.sync(() => {
+      if (enabled) this.#selection.allowRetry();
       if (!enabled && this.#store.getSnapshot().media.local.microphone.state === "enabled") this.#ownMicrophoneOff = true;
       this.#microphoneMutedByOtherDevice = false;
       this.#publish();
     }).pipe(Effect.andThen(this.#set("microphone", enabled)));
-  setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
-  captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
+  setCameraEnabled = (enabled: boolean): ClientEffect<void> =>
+    Effect.sync(() => {
+      if (enabled) this.#selection.allowRetry();
+    }).pipe(Effect.andThen(this.#set("camera", enabled)));
+  captureCameraPreview = (): ClientEffect<CameraPreview> => Effect.sync(() => this.#selection.allowRetry()).pipe(Effect.andThen(this.#cameraSource("preview")), Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
     Effect.suspend(() => {
