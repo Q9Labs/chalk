@@ -4,7 +4,7 @@ import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 
 /**
  * The header above your own shared screen. It sits in the tile's flow, so it never covers the preview.
- * The sharer's title line, the drawing buttons and the pairing row are portalled in through the three hosts.
+ * The sharer's title line and the drawing buttons are portalled in through the two hosts.
  */
 export function LocalShareControls({
   capture,
@@ -13,7 +13,6 @@ export function LocalShareControls({
   onStopSharing,
   titleHost,
   policyHost,
-  noticeHost,
 }: {
   readonly capture?: ScreenShareCapture;
   readonly pending: boolean;
@@ -21,7 +20,6 @@ export function LocalShareControls({
   readonly onStopSharing?: () => void;
   readonly titleHost?: (element: HTMLElement | null) => void;
   readonly policyHost?: (element: HTMLElement | null) => void;
-  readonly noticeHost?: (element: HTMLElement | null) => void;
 }) {
   const phone = usePhoneCall();
   const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : capture?.surface === "monitor" ? "your screen" : null;
@@ -61,7 +59,6 @@ export function LocalShareControls({
           </ChalkButton>
         ) : null}
       </div>
-      <div ref={noticeHost} className="contents" />
     </div>
   );
 }
