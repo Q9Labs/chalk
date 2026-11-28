@@ -16,11 +16,12 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
   const phone = await person("LobbyPhone", 3, { device: "android" });
   let call;
   let episodeId;
+  let apiKey;
 
   const admit = async (name, kind) => {
     const response = await fetch(new URL("/v1/tenants/" + call.tenantId + "/spaces/" + call.spaceId + "/episodes/" + episodeId + "/participants", web), {
       method: "POST",
-      headers: { Authorization: "Bearer " + seed.systemToken, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
       body: JSON.stringify({ name, role: "collaborator", identity_kind: kind, admission: "direct" }),
     });
     if (!response.ok) throw new Error("admitting " + name + " answered HTTP " + response.status + " " + ((await response.json().catch(() => null))?.error?.code ?? ""));
@@ -36,6 +37,14 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
   });
 
   await step("the API admits two AI participants", async () => {
+    const created = await fetch(new URL("/v1/tenants/" + call.tenantId + "/api-keys", web), {
+      method: "POST",
+      headers: { Authorization: "Bearer " + seed.systemToken, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ name: "Lobby journey", scopes: ["episodes:read", "episodes:write", "spaces:read"], expires_at: new Date(Date.now() + 3600_000).toISOString() }),
+    });
+    const body = await created.json().catch(() => null);
+    apiKey = body?.token ?? body?.secret ?? body?.api_key_secret ?? body?.key;
+    if (!created.ok || typeof apiKey !== "string") throw new Error("creating a backend credential answered HTTP " + created.status + ", fields " + Object.keys(body ?? {}).join(","));
     await admit("Scribe", "agent");
     await admit("Aria", "agent");
   });
