@@ -36,6 +36,11 @@ export interface AnnotationBrush {
 
 export const defaultBrush: AnnotationBrush = { tool: "pen", width: 192, keep: false, stamp: "check" };
 
+/** The highlighter is a wide marker; every other tool draws at the pen width. */
+export function penWidth(tool: AnnotationTool): number {
+  return tool === "highlighter" ? 900 : defaultBrush.width;
+}
+
 export function targetOf(state: ScreenAnnotationState): ScreenAnnotationTarget {
   return { layerId: state.layer.layer_id, fence: state.fence };
 }

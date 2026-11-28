@@ -14,11 +14,31 @@ function readIntroDismissed() {
   }
 }
 
-export function AnnotationHelperOffer({ client, state, actorId, helper, capture }: { readonly client: ScreenAnnotationClient; readonly state: ScreenAnnotationState; readonly actorId: string; readonly helper: ScreenAnnotationHelper; readonly capture?: ScreenShareCapture }) {
+export function AnnotationHelperOffer({
+  client,
+  state,
+  actorId,
+  helper,
+  capture,
+  open,
+  onOpenChange,
+  onShowing,
+}: {
+  readonly client: ScreenAnnotationClient;
+  readonly state: ScreenAnnotationState;
+  readonly actorId: string;
+  readonly helper: ScreenAnnotationHelper;
+  readonly capture?: ScreenShareCapture;
+  /** The sharer asked to see the marks on their own screen. */
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** Whether Chalk Helper is connected and drawing the marks on the sharer's screen. */
+  readonly onShowing: (showing: boolean) => void;
+}) {
   const [drawing, setDrawing] = useState<string | null>(null);
   const [introDismissed, setIntroDismissed] = useState(readIntroDismissed);
-  const [drawingDismissed, setDrawingDismissed] = useState(false);
-  const [opened, setOpened] = useState(false);
+  const opened = open;
+  const setOpened = onOpenChange;
   const [screen, setScreen] = useState<HelperScreen>({ kind: "idle" });
   const [code, setCode] = useState("");
   const attempt = useRef<AbortController | null>(null);
@@ -44,17 +64,13 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     };
   }, [client, state.layer.layer_id, actorId]);
 
+  const showing = screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved");
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Tell the sharer's bar whether Helper is already drawing the marks.
+  useEffect(() => onShowing(showing), [showing, onShowing]);
+
   if (actorId !== state.layer.sharer_id) return null;
   const offersIntro = Boolean(helper.installUrl) && capture?.surface !== "browser";
-  if (!opened && screen.kind === "idle" && (!drawing || drawingDismissed) && (!offersIntro || introDismissed)) {
-    return offersIntro ? (
-      <div className="chalk-ann-bar">
-        <button type="button" className="chalk-ann-btn" onClick={() => setOpened(true)}>
-          Chalk Helper
-        </button>
-      </div>
-    ) : null;
-  }
+  if (!opened && screen.kind === "idle" && (!offersIntro || introDismissed)) return null;
   const share: ScreenAnnotationHelperShare = { client, layer: state.layer, participantId: actorId, surface: capture?.surface ?? null };
   const start = () => {
     attempt.current?.abort();
@@ -146,7 +162,6 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     setCode("");
     setScreen({ kind: "idle" });
     setOpened(false);
-    if (drawing) setDrawingDismissed(true);
     if (offersIntro && !introDismissed) {
       setIntroDismissed(true);
       try {
