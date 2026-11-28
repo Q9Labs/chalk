@@ -53,8 +53,11 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
 
   await step("A remote gesture sets the sharer tab cue and puts its kept mark in PiP", async () => {
     const title = await sharer.page.title();
-    await viewer.page.getByRole("button", { name: "Annotate", exact: true }).click(wait);
-    await viewer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await viewer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
+    await viewer.page.getByRole("button", { name: "More", exact: true }).click();
+    const fade = viewer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
+    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
+    await viewer.page.keyboard.press("Escape");
     const bounds = await viewer.page.locator(canvas).first().boundingBox(wait);
     assert.ok(bounds, "viewer has an annotation canvas");
     const { x, y, width, height } = bounds;
@@ -76,11 +79,16 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
   });
 
   await step("The sharer pauses and clears marks, then closing the share closes PiP", async () => {
-    await sharer.page.getByRole("button", { name: "Pause marks", exact: true }).click();
+    const who = sharer.page.getByRole("button", { name: /^Who can draw/ });
+    await who.click();
+    await sharer.page.getByRole("menuitemcheckbox", { name: "Pause drawing" }).click();
+    await sharer.page.keyboard.press("Escape");
     await viewer.page.getByRole("status").filter({ hasText: "Marks are paused" }).waitFor(wait);
-    await sharer.page.getByRole("button", { name: "Resume marks", exact: true }).click();
-    await sharer.page.getByRole("button", { name: "Clear marks", exact: true }).click();
-    await sharer.page.getByRole("button", { name: "Clear all marks", exact: true }).click();
+    await who.click();
+    await sharer.page.getByRole("menuitemcheckbox", { name: "Pause drawing" }).click();
+    await sharer.page.keyboard.press("Escape");
+    await who.click();
+    await sharer.page.getByRole("menuitem", { name: "Clear all marks" }).click();
     await inPreview(false);
     await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
     await sharer.page.getByLabel("Stop sharing", { exact: true }).click();

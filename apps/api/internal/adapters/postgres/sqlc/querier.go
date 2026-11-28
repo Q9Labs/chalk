@@ -362,6 +362,7 @@ type Querier interface {
 	ListSFUWindowNodes(ctx context.Context, applicationID string) ([]SfuWindowNode, error)
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
+	ListSpaceLobbyParticipants(ctx context.Context, arg ListSpaceLobbyParticipantsParams) ([]ListSpaceLobbyParticipantsRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListStalePresentingRenderJobs(ctx context.Context, arg ListStalePresentingRenderJobsParams) ([]ListStalePresentingRenderJobsRow, error)
 	ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetryEpisodeRowsParams) ([]TelemetrySource, error)

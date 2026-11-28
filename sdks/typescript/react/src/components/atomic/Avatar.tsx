@@ -72,7 +72,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
           {avatarRecipe.initials}
         </div>
       )}
-      {showAIBadge ? <AIBadge className="absolute -bottom-1 -right-1 ring-2 ring-[var(--chalk-surface)]" /> : null}
+      {showAIBadge ? <AIBadge className="absolute -bottom-1 -right-1 rounded-full bg-[var(--chalk-surface)] p-px text-[var(--chalk-text)] ring-2 ring-[var(--chalk-surface)] [&_svg]:size-3" /> : null}
       {status && (
         <span
           className="absolute bottom-0 right-0 block rounded-full ring-2 ring-[var(--chalk-surface)]"

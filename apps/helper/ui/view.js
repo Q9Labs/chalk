@@ -1,5 +1,5 @@
 import { paintFixture, paintLive } from "./fixture-paint.js";
-import { paintPermission, permissionMarkup } from "./permission-panel.js";
+import { mountSettings, paintSettings } from "./settings.js";
 
 const { invoke } = window.__TAURI__.core;
 const label = window.__TAURI_INTERNALS__.metadata.currentWindow.label;
@@ -11,21 +11,12 @@ function control(action, selector) {
   listen(selector, "click", () => void run(action).catch(showError));
 }
 
-function styleButtons() {
-  return `<button type="button" data-style="island">Island</button>
-    <button type="button" data-style="pill">Pill</button>`;
-}
-
-function bindStyleButtons() {
-  root.querySelectorAll("[data-style]").forEach((button) => {
-    button.addEventListener("click", () => void run("change_style", { style: button.dataset.style }).catch(showError));
-  });
-}
-
 function showError(error) {
   const status = root.querySelector("#status");
   if (status) status.textContent = error instanceof Error ? error.message : String(error);
 }
+
+window.addEventListener("keydown", () => (document.documentElement.dataset.keys = ""), { once: true });
 
 const isOverlay = label.startsWith("ink-");
 if (isOverlay) {
@@ -58,14 +49,17 @@ if (isOverlay) {
     if (event.key === "Escape") send("cancel_draw");
   });
 } else if (label === "hud") {
-  root.innerHTML = `<div class="hud" data-look="island" data-edge="top">
-    <button class="grip" type="button" aria-label="Drag control" tabindex="-1"></button>
-    <span class="sharing"><span class="pulse"></span><span class="word">Sharing screen</span></span>
-    <button class="pencil" type="button" aria-label="Draw" title="Draw">✎</button>
-    <button class="overflow" type="button" aria-label="Control options">•••</button>
+  root.innerHTML = `<div class="hud" role="toolbar" aria-label="Chalk Helper controls" data-look="island" data-edge="top">
+    <button class="grip" type="button" aria-label="Drag control" tabindex="-1" aria-hidden="true"></button>
+    <span class="sharing"><span class="pulse" aria-hidden="true"></span><span class="word">Sharing screen</span></span>
+    <button class="pencil" type="button" aria-label="Draw" aria-pressed="false" title="Draw">✎</button>
+    <button class="overflow" type="button" aria-label="More options" aria-haspopup="menu">•••</button>
     <span role="status" class="sr-only"></span>
   </div>`;
   control("toggle_draw", ".pencil");
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && root.querySelector(".pencil").getAttribute("aria-pressed") === "true") void run("toggle_draw").catch(showError);
+  });
   listen(".overflow", "click", () => void run("show_hud_menu").catch(showError));
   const grip = root.querySelector(".grip");
   let lastMove = 0;
@@ -89,75 +83,18 @@ if (isOverlay) {
   grip.addEventListener("pointercancel", end);
 } else if (label === "draw-bar") {
   const colors = ["white", "blue", "yellow", "red"];
-  root.innerHTML = `<div class="drawbar"><span>Draw</span>
-    ${colors.map((color) => `<button class="color ${color}" type="button" data-color="${color}" aria-label="${color} ink"></button>`).join("")}
+  root.innerHTML = `<div class="drawbar" role="toolbar" aria-label="Draw on your screen"><span id="drawbar-title">Draw</span>
+    ${colors.map((color) => `<button class="color ${color}" type="button" data-color="${color}" aria-label="${color} ink" aria-pressed="false"></button>`).join("")}
     <button type="button" class="done">Done</button><span role="status" class="sr-only"></span></div>`;
   root.querySelectorAll("[data-color]").forEach((button) => {
     button.addEventListener("click", () => void run("change_color", { color: button.dataset.color }).catch(showError));
   });
   control("cancel_draw", ".done");
-} else {
-  root.innerHTML = `<section class="settings">
-    <h1>Chalk Helper</h1>
-    <p id="connection">Not connected</p>
-    <p id="connection-help">Start sharing in Chalk to connect.</p>
-    <div class="approval" hidden>
-      <p id="approval-instruction"></p>
-      <p id="fingerprint"></p>
-      <p id="confirmation-code"></p>
-      <button type="button" id="deny">Deny</button>
-      <button type="button" id="allow">Allow</button>
-    </div>
-    ${permissionMarkup}
-    <button type="button" id="follow-window" hidden>Follow captured window</button>
-    <button type="button" id="live-draw" hidden>Draw one mark</button>
-    <div id="displays" hidden><p>Choose the display you’re sharing.</p><div id="display-options"></div></div>
-    <div id="device-code" hidden>
-      <label>Account ID from your Chalk call <input id="device-account" maxlength="36" autocomplete="off" spellcheck="false"></label>
-      <button type="button" id="new-device-code">Get a device code</button>
-      <button type="button" id="forget-device">Remove local credential</button>
-      <p id="device-status" role="status"></p>
-      <p id="device-value"></p>
-      <p id="device-fingerprint"></p>
-    </div>
-    <div class="setting"><span>Sharer control</span><div class="segment">${styleButtons()}</div></div>
-    <div class="setting" id="shortcut" hidden><span>Draw shortcut</span><kbd>${navigator.platform.startsWith("Mac") ? "⌘ ⇧ 9" : "Ctrl Shift 9"}</kbd></div>
-    <button type="button" id="update" hidden>Check for updates</button>
-    <p role="status" id="status"></p>
-  </section>`;
-  bindStyleButtons();
-  control("check_for_update", "#update");
-  control("toggle_live_draw", "#live-draw");
-  control("follow_window", "#follow-window");
-  control("later_screen_recording", "#permission-later");
-  control("show_app_in_finder", "#permission-finder");
-  listen("#permission-primary", "click", (event) => {
-    const kind = event.currentTarget.dataset.action;
-    if (kind) void run(kind).catch(showError);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") void run("cancel_draw").catch(showError);
   });
-  listen(
-    "#new-device-code",
-    "click",
-    () =>
-      void run("start_device_code", {
-        tenant_id: root.querySelector("#device-account").value,
-      }).catch(showError),
-  );
-  control("forget_device", "#forget-device");
-  for (const [id, allowed] of [
-    ["#allow", true],
-    ["#deny", false],
-  ]) {
-    listen(
-      id,
-      "click",
-      () =>
-        void run("decide_pairing", {
-          fingerprint: root.querySelector("#fingerprint").textContent,
-          allowed,
-        }).catch(showError),
-    );
-  }
+} else {
+  mountSettings({ root, run, showError, refresh, listen, control });
 }
 
 let renderedProbe;
@@ -197,70 +134,6 @@ function paintHud(view) {
   hud.querySelector(".word").textContent = view.paused ? "Marks paused" : "Sharing screen";
   hud.querySelector(".pencil").setAttribute("aria-pressed", String(view.drawing));
   hud.querySelector(".pencil").disabled = view.paused;
-}
-
-function paintDisplays(view) {
-  const displays = root.querySelector("#displays");
-  const options = root.querySelector("#display-options");
-  displays.hidden = view.monitors.length === 0;
-  if (JSON.stringify(view.monitors) !== options.dataset.monitors) {
-    options.dataset.monitors = JSON.stringify(view.monitors);
-    options.replaceChildren(
-      ...view.monitors.map((monitor, index) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = monitor;
-        button.addEventListener("click", () => void run("select_monitor", { index }).catch(showError));
-        return button;
-      }),
-    );
-  }
-}
-
-function paintApproval(view) {
-  root.querySelector(".approval").hidden = !view.approval;
-  const { approved, fingerprint, confirmationCode } = view.approval ?? { approved: false, fingerprint: "", confirmationCode: "" };
-  root.querySelector("#approval-instruction").textContent = approved ? "Enter this confirmation code in Chalk." : "Compare this fingerprint with the fingerprint in Chalk.";
-  const printed = root.querySelector("#fingerprint");
-  printed.textContent = fingerprint;
-  printed.hidden = approved;
-  root.querySelector("#confirmation-code").textContent = approved ? confirmationCode : "";
-  root.querySelector("#allow").hidden = approved;
-  root.querySelector("#deny").hidden = approved;
-}
-
-function paintDevice(view) {
-  const device = view.device ?? { available: false, status: "", code: "", fingerprint: null };
-  root.querySelector("#device-code").hidden = !device.available;
-  paintDeviceStatus(device.status ?? "");
-  root.querySelector("#device-value").textContent = device.code;
-  root.querySelector("#device-fingerprint").textContent = device.fingerprint ? `Fingerprint: ${device.fingerprint}` : "";
-}
-
-function paintDeviceStatus(status) {
-  const node = root.querySelector("#device-status");
-  if (node.textContent !== status) node.textContent = status;
-}
-
-function paintConnection(view) {
-  const name = view.connected ? "Connected" : "Not connected";
-  root.querySelector("#connection").textContent = view.fixture ? "Development fixture" : name;
-  root.querySelector("#connection-help").textContent = view.connected ? "Use the preview in Chalk while this capture is unverified." : "Start sharing in Chalk to connect.";
-}
-
-function paintSettings(view) {
-  root.querySelector("#shortcut").hidden = !view.hotkey;
-  paintConnection(view);
-  paintPermission(root, view.approval ? null : view.permission, view.canFollowWindow);
-  root.querySelector("#live-draw").hidden = !view.liveDrawingAvailable;
-  paintDisplays(view);
-  paintApproval(view);
-  paintDevice(view);
-  root.querySelector("#update").hidden = !view.updateAvailable;
-  if (view.updateStatus) root.querySelector("#status").textContent = view.updateStatus;
-  root.querySelectorAll("[data-style]").forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.style === view.preferences.style));
-  });
 }
 
 function paintFixtureWindow(view) {

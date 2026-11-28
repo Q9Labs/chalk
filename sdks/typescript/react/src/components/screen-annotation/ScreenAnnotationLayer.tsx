@@ -16,6 +16,8 @@ export interface ScreenAnnotationLayerProps {
   readonly fit: AnnotationFit;
   readonly exportProof?: BakedExportProof;
   readonly bakedFrame?: RefObject<HTMLCanvasElement | null>;
+  /** Whose marks are not named: the person looking at the share. */
+  readonly viewerId?: string;
   readonly input?: {
     readonly actor: AnnotationAuthor;
     readonly brush: AnnotationBrush;
@@ -30,7 +32,7 @@ export function ScreenAnnotationLayer(props: ScreenAnnotationLayerProps): React.
   return <LayerCanvas key={`${props.state.layer.layer_id}:${props.state.layer.publication_id}:${props.track.id}`} {...props} />;
 }
 
-function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, input, exportProof, bakedFrame }: ScreenAnnotationLayerProps): React.JSX.Element {
+function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, input, exportProof, bakedFrame, viewerId }: ScreenAnnotationLayerProps): React.JSX.Element {
   const gesture = useRef<Gesture | null>(null);
   const cursor = useRef<ScreenAnnotationCursor | null>(null);
   const localPresenceAt = useRef(0);
@@ -43,7 +45,7 @@ function LayerCanvas({ client, state, presence, fontUrl, track, videoRef, fit, i
   const target = targetOf(state);
   const baked = state.layer.burned_in === true;
 
-  const { canvasRef, refresh, videoSurface, exportSamples } = useAnnotationFramePaint({ client, state, presence, fontUrl, track, videoRef, fit, actor, drawing, baked, exportProof, bakedFrame, gesture, cursor, localPresenceAt, optimistic });
+  const { canvasRef, refresh, videoSurface, exportSamples } = useAnnotationFramePaint({ client, state, presence, fontUrl, track, videoRef, fit, actor, viewerId, drawing, baked, exportProof, bakedFrame, gesture, cursor, localPresenceAt, optimistic });
 
   const { layerId, fence } = target;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Cancel latest-value presence and input on disable or when the gesture's authority is retired.

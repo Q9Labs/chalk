@@ -99,4 +99,18 @@ func TestAdmissionIdentityKindIsStableForAnExternalIdentity(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select coalesce(description, '') from participants where tenant_id = $1 and episode_id = $2 order by created_at limit 1`, tenantID.Bytes(), episodeID.Bytes()).Scan(&description); err != nil || description != "AI teammate" {
 		t.Fatalf("stored description = %q, err = %v, want AI teammate", description, err)
 	}
+
+	lobby, err := service.ListLobbyParticipants(ctx, tenantID, spaceID)
+	if err != nil {
+		t.Fatalf("list lobby participants: %v", err)
+	}
+	found := false
+	for _, participant := range lobby {
+		if participant.DisplayName == "Participant" && participant.IdentityKind == "agent" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("lobby rows = %#v, want participant name and agent kind", lobby)
+	}
 }

@@ -338,6 +338,17 @@ impl Pairing {
             })
     }
 
+    pub fn capture_status(&self) -> Option<&'static str> {
+        let state = self.0.state.lock().expect("pairing state");
+        let session = state.session.as_ref().filter(|session| session.usable())?;
+        Some(session.capture.status())
+    }
+
+    /// The sharer ends the session from Helper; the browser sees its event stream close.
+    pub fn disconnect(&self) {
+        self.0.state.lock().expect("pairing state").session = None;
+    }
+
     pub fn decide(&self, fingerprint: &str, allowed: bool) {
         let mut state = self.0.state.lock().expect("pairing state");
         if state.approval.as_ref().is_some_and(|approval| {

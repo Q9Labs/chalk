@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationMark, ScreenAnnotationPresence, ScreenAnnotationSnapshot, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
+import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationDraft, ScreenAnnotationMark, ScreenAnnotationPresence, ScreenAnnotationSnapshot, ScreenAnnotationState, ScreenAnnotationTarget } from "@q9labsai/chalk-client";
 import type { ScreenAnnotationActions } from "@q9labsai/chalk-react";
 import { ScreenShareViewSurface } from "@q9labsai/chalk-react";
+import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { webAnnotation } from "../lib/screen-annotation";
 
 // token-ratchet-ignore: fixture ink is a wire-format color, not a UI theme color.
@@ -121,6 +122,8 @@ function createAnnotationFixture() {
       notify();
     },
     setPolicy: (policy: "hosts" | "picked" | "everyone") => hostClient.dispatch({ layerId: layer.layer_id, fence: state.fence }, { kind: "set_policy", policy }),
+    commit: (client: ScreenAnnotationClient, draft: ScreenAnnotationDraft) => client.dispatch({ layerId: layer.layer_id, fence: state.fence }, { kind: "commit", draft }),
+    ask: () => viewerClient.dispatch({ layerId: layer.layer_id, fence: state.fence }, { kind: "request_draw" }),
   };
 }
 
@@ -158,16 +161,55 @@ function useFixtureTrack() {
   return track;
 }
 
-export function ScreenAnnotationFixture() {
-  const [fixture] = useState(createAnnotationFixture);
+type HelperFixture = "offer" | "fingerprint" | "confirm" | "connected";
+
+const fingerprint = "4F2A-91C0";
+const approval = (attach: (status: (value: "ready") => void, ask: (signal: AbortSignal) => Promise<string>) => Promise<void>) => async () => ({ kind: "approval" as const, fingerprint, remembered: false, attach });
+
+const helperFixtures = {
+  offer: { challenge: async () => Promise.reject(new DOMException("Local access denied", "NotAllowedError")) },
+  fingerprint: { challenge: approval(() => new Promise<void>(() => {})) },
+  confirm: { challenge: approval((_status, ask) => ask(new AbortController().signal).then(() => new Promise<void>(() => {}))) },
+  connected: { challenge: approval(async (status) => status("ready")) },
+} as const;
+
+const at = (x: number, y: number) => ({ x: Math.round(x * 65535), y: Math.round(y * 65535) });
+const stroke = (id: string, color: string, shape: ScreenAnnotationDraft["shape"]): ScreenAnnotationDraft => ({ mark_id: id, lifetime: "keep", color, width: 192, shape });
+
+export interface ScreenAnnotationScene {
+  readonly view?: "viewer" | "host";
+  readonly policy?: "everyone" | "picked" | "hosts";
+  /** The viewer has asked to draw, which only means something under Ask first. */
+  readonly asked?: boolean;
+  /** Both people have already drawn on the share. */
+  readonly marks?: boolean;
+  readonly captureSurface?: "browser" | "monitor";
+  readonly helper?: HelperFixture;
+}
+
+export function ScreenAnnotationFixture({ view = "viewer", policy = "everyone", asked = false, marks = false, captureSurface = "browser", helper }: ScreenAnnotationScene = {}) {
+  const [fixture] = useState(() => {
+    const made = createAnnotationFixture();
+    void (async () => {
+      if (marks) {
+        await made.commit(made.viewerClient, stroke("omar-pen", "#c15a10", { kind: "pen", points: [at(0.3, 0.55), at(0.4, 0.6), at(0.55, 0.6), at(0.7, 0.55)] }));
+        await made.commit(made.viewerClient, stroke("omar-arrow", "#c15a10", { kind: "arrow", from_point: at(0.55, 0.3), to_point: at(0.8, 0.45) }));
+        await made.commit(made.hostClient, stroke("sara-box", "#786bff", { kind: "box", from_point: at(0.08, 0.32), to_point: at(0.45, 0.45) }));
+      }
+      if (policy !== "everyone") await made.setPolicy(policy);
+      if (asked) await made.ask();
+    })();
+    return made;
+  });
   const [saved, setSaved] = useState(0);
-  const [hostView, setHostView] = useState(false);
+  const [hostView, setHostView] = useState(view === "host" || helper !== undefined);
   const track = useFixtureTrack();
   const actions: ScreenAnnotationActions = { saveToWhiteboard: async (frame) => setSaved(frame.marks.length) };
   const people = [viewer, sharer].map((person) => ({ id: person.participant_id, name: person.display_name, roleCanDraw: true, managesPolicy: person === sharer }));
   const actor = hostView ? sharer : viewer;
   return (
     <main data-chalk="" className="chalk-frame grid min-h-screen place-content-center gap-3 p-4">
+      <ShellStyles />
       <div className="flex flex-wrap gap-3" aria-label="Fixture controls">
         <button type="button" onClick={() => setHostView(!hostView)}>
           {hostView ? "View as Omar" : "View as Sara"}
@@ -190,7 +232,9 @@ export function ScreenAnnotationFixture() {
             screenShareTrack={track}
             sharedByName="Sara"
             isLocal={hostView}
-            capture={hostView ? { surface: "browser", label: null } : undefined}
+            onStopSharing={hostView ? async () => fixture.end() : undefined}
+            onChangeShare={hostView ? async () => undefined : undefined}
+            capture={hostView ? { surface: helper ? "monitor" : captureSurface, label: null } : undefined}
             annotationContext={{ actorId: actor.participant_id, actorName: actor.display_name, people, grants: [] }}
             annotation={{
               client: hostView ? fixture.hostClient : fixture.viewerClient,
@@ -199,9 +243,12 @@ export function ScreenAnnotationFixture() {
               fontUrl: webAnnotation.fontUrl,
               offerPngDownload: webAnnotation.offerPngDownload,
               helper: {
-                challenge: async () => {
-                  throw new DOMException("Local access denied", "NotAllowedError");
-                },
+                installUrl: helper ? "https://downloads.chalkmeet.com/helper/" : undefined,
+                challenge: helper
+                  ? helperFixtures[helper].challenge
+                  : async () => {
+                      throw new DOMException("Local access denied", "NotAllowedError");
+                    },
                 lookupCode: async () => ({ deviceName: "Demo Mac", approve: async (status) => status("ready") }),
               },
             }}

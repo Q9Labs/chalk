@@ -64,6 +64,7 @@ type FramePaintOptions = {
   readonly videoRef: RefObject<HTMLVideoElement | null>;
   readonly fit: AnnotationFit;
   readonly actor?: AnnotationAuthor;
+  readonly viewerId?: string;
   readonly drawing: boolean;
   readonly baked: boolean;
   readonly exportProof?: BakedExportProof;
@@ -74,7 +75,7 @@ type FramePaintOptions = {
   readonly optimistic: RefObject<Map<string, Preview>>;
 };
 
-export function useAnnotationFramePaint({ client, state, presence, fontUrl, track, videoRef, fit, actor, drawing, baked, exportProof, bakedFrame, gesture, cursor, localPresenceAt, optimistic }: FramePaintOptions) {
+export function useAnnotationFramePaint({ client, state, presence, fontUrl, track, videoRef, fit, actor, viewerId, drawing, baked, exportProof, bakedFrame, gesture, cursor, localPresenceAt, optimistic }: FramePaintOptions) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const exportSamples = useRef(new Map<string, ExportSample>());
   const videoSurface = useRef<ReturnType<typeof createBakedVideoSurface>>(null);
@@ -141,7 +142,7 @@ export function useAnnotationFramePaint({ client, state, presence, fontUrl, trac
       const draft = gesture.current ? gestureDraft(gesture.current) : null;
       if (actor && drawing && (cursor.current || draft)) pending.push(localSample(actor, draft, baked ? null : cursor.current));
       const localTouch = state.layer.burned_in && actor && drawing && nowMs - localPresenceAt.current < LASER_TRAIL_MS ? cursor.current?.point : undefined;
-      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...pending], nowMs), localTouch, nowMs });
+      paintAnnotation(context, { rect, clip, sharerId: state.layer.sharer_id, paused: state.paused, marks: state.layer.burned_in ? [] : state.marks, presence: tracker.current.update([...remote, ...pending], nowMs), localTouch, nameMarksExcept: viewerId ?? actor?.participant_id, nowMs });
       if (animateAgain(remote, nowMs, localTouch !== undefined)) schedule();
     };
     function animateAgain(remote: readonly ScreenAnnotationPresence[], nowMs: number, touch: boolean) {
@@ -227,7 +228,7 @@ export function useAnnotationFramePaint({ client, state, presence, fontUrl, trac
       refresh.current = () => undefined;
       paintCurrent.current = () => undefined;
     };
-  }, [client, state, presence, fontUrl, track, videoRef, fit, actor, drawing, baked, exportProof, gesture, cursor, localPresenceAt, optimistic]);
+  }, [client, state, presence, fontUrl, track, videoRef, fit, actor, viewerId, drawing, baked, exportProof, gesture, cursor, localPresenceAt, optimistic]);
 
   return { canvasRef, refresh, videoSurface, exportSamples };
 }

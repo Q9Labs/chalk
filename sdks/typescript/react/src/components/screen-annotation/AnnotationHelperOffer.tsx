@@ -1,7 +1,9 @@
 import type { ScreenAnnotationClient, ScreenAnnotationState, ScreenShareCapture } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState } from "react";
-import { HelperOfferActions, type HelperScreen } from "./HelperOfferActions";
-import { HelperOfferStep } from "./HelperOfferStep";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { usePhoneCall } from "../../internal/call-width";
+import { HelperOfferStep, type HelperScreen } from "./HelperOfferStep";
 import type { ScreenAnnotationHelper, ScreenAnnotationHelperShare, ScreenAnnotationHelperStatus } from "./model";
 
 const introDismissedKey = "chalk.annotation-helper.intro-dismissed";
@@ -14,16 +16,36 @@ function readIntroDismissed() {
   }
 }
 
-export function AnnotationHelperOffer({ client, state, actorId, helper, capture }: { readonly client: ScreenAnnotationClient; readonly state: ScreenAnnotationState; readonly actorId: string; readonly helper: ScreenAnnotationHelper; readonly capture?: ScreenShareCapture }) {
-  const [drawing, setDrawing] = useState<string | null>(null);
+export function AnnotationHelperOffer({
+  client,
+  state,
+  actorId,
+  helper,
+  capture,
+  open,
+  onOpenChange,
+  onShowing,
+}: {
+  readonly client: ScreenAnnotationClient;
+  readonly state: ScreenAnnotationState;
+  readonly actorId: string;
+  readonly helper: ScreenAnnotationHelper;
+  readonly capture?: ScreenShareCapture;
+  /** The sharer asked to see the marks on their own screen. */
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** Whether Chalk Helper is connected and drawing the marks on the sharer's screen. */
+  readonly onShowing: (showing: boolean) => void;
+}) {
+  const phone = usePhoneCall();
   const [introDismissed, setIntroDismissed] = useState(readIntroDismissed);
-  const [drawingDismissed, setDrawingDismissed] = useState(false);
-  const [opened, setOpened] = useState(false);
+  const opened = open;
+  const setOpened = onOpenChange;
   const [screen, setScreen] = useState<HelperScreen>({ kind: "idle" });
   const [code, setCode] = useState("");
   const attempt = useRef<AbortController | null>(null);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Observe the first remote mark without widening the call subscription; abort the attachment with this publication.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Abort the attachment when this publication's layer goes away.
   useEffect(() => {
     const observe = () => {
       const snapshot = client.getSnapshot();
@@ -31,10 +53,6 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
         attempt.current?.abort();
         return;
       }
-      const active = snapshot.state.marks.find((mark) => mark.author.participant_id !== actorId);
-      const preview = snapshot.presence.find((peer) => peer.author.participant_id !== actorId && (peer.draft || peer.cursor?.tool === "pointer"));
-      const name = active?.author.display_name ?? preview?.author.display_name;
-      if (!snapshot.state.paused && name) setDrawing((prior) => prior ?? name);
     };
     const unsubscribe = client.subscribe(observe);
     observe();
@@ -44,17 +62,14 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     };
   }, [client, state.layer.layer_id, actorId]);
 
+  const showing = screen.kind === "status" && (screen.status === "ready" || screen.status === "device_approved");
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Tell the sharer's bar whether Helper is already drawing the marks.
+  useEffect(() => onShowing(showing), [showing, onShowing]);
+
   if (actorId !== state.layer.sharer_id) return null;
   const offersIntro = Boolean(helper.installUrl) && capture?.surface !== "browser";
-  if (!opened && screen.kind === "idle" && (!drawing || drawingDismissed) && (!offersIntro || introDismissed)) {
-    return offersIntro ? (
-      <div className="chalk-ann-bar">
-        <button type="button" className="chalk-ann-btn" onClick={() => setOpened(true)}>
-          Chalk Helper
-        </button>
-      </div>
-    ) : null;
-  }
+  if (!opened && screen.kind === "idle" && (!offersIntro || introDismissed)) return null;
+  if (screen.kind === "status" && screen.status === "ready") return null;
   const share: ScreenAnnotationHelperShare = { client, layer: state.layer, participantId: actorId, surface: capture?.surface ?? null };
   const start = () => {
     attempt.current?.abort();
@@ -146,7 +161,6 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
     setCode("");
     setScreen({ kind: "idle" });
     setOpened(false);
-    if (drawing) setDrawingDismissed(true);
     if (offersIntro && !introDismissed) {
       setIntroDismissed(true);
       try {
@@ -158,17 +172,22 @@ export function AnnotationHelperOffer({ client, state, actorId, helper, capture 
   };
 
   return (
-    <div data-part="annotation-helper-offer" className="chalk-ann-card">
-      <HelperOfferStep screen={screen} drawing={drawing} guidance={helper.captureGuidance?.(share)} helper={helper} code={code} setCode={setCode} connect={connect} lookup={lookup} />
-      <HelperOfferActions
-        screen={screen}
-        helper={helper}
-        dismiss={dismiss}
-        useCode={() => {
-          start();
-          setScreen({ kind: "code" });
-        }}
-      />
+    <div
+      data-part="annotation-helper-offer"
+      data-phone={phone ? "" : undefined}
+      role="region"
+      aria-label="Chalk Helper"
+      className="chalk-pair"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || screen.kind === "idle") return;
+        event.stopPropagation();
+        dismiss();
+      }}
+    >
+      <HelperOfferStep screen={screen} guidance={helper.captureGuidance?.(share)} helper={helper} code={code} setCode={setCode} connect={connect} lookup={lookup} />
+      <button type="button" className="chalk-ann-btn chalk-pair-x" aria-label="Close" onClick={dismiss}>
+        <HugeiconsIcon icon={Cancel01Icon} size={18} aria-hidden="true" />
+      </button>
     </div>
   );
 }

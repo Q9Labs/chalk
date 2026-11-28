@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { runJourney } from "../../../.agents/skills/verify-chalk/scripts/journey.mjs";
+import { keepMarks } from "./screen-annotation-support.mjs";
 
 const canvas = '[data-part="screen-annotation-layer"]';
 const sourceTitle = "Annotation latency source";
@@ -106,11 +107,11 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     await sharer.page.bringToFront();
     await control(sharer, "Share screen");
     await sharer.page.getByRole("button", { name: "Pop out marks", exact: true }).click(timeout);
-    await drawer.page.getByRole("button", { name: "Annotate", exact: true }).click(timeout);
+    await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(timeout);
     await drawer.page.getByRole("button", { name: "Ink colour and width" }).click();
     await drawer.page.getByLabel("Ink colour", { exact: true }).fill("#ff00ff");
     await drawer.page.keyboard.press("Escape");
-    await drawer.page.getByRole("button", { name: "Keep new marks", exact: true }).click();
+    await keepMarks(drawer.page);
     for (const endpoint of [{ page: drawer.page, selector: canvas }, ...surfaces]) {
       await endpoint.page.waitForFunction(contentBox, endpoint.selector, timeout);
     }

@@ -27,6 +27,7 @@ type Repository interface {
 	CreateArrival(context.Context, Arrival) (Arrival, error)
 	GetArrival(context.Context, utilities.ID) (Arrival, error)
 	GetArrivalForCredential(context.Context, utilities.ID, []byte) (Arrival, error)
+	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]LobbyParticipant, error)
 	GetArrivalByIdempotency(context.Context, utilities.ID, utilities.ID, string) (Arrival, error)
 	UpdateArrivalState(context.Context, UpdateArrivalStateInput) (Arrival, error)
 
@@ -46,6 +47,20 @@ type Lifecycle interface {
 	MarkAutoLifecycleArchiving(context.Context, utilities.ID, utilities.ID) (AutoLifecycle, error)
 	MarkAutoLifecycleArchived(context.Context, utilities.ID, utilities.ID) (AutoLifecycle, error)
 	RetryAutoLifecycle(context.Context, RetryAutoLifecycleInput) (AutoLifecycle, error)
+}
+
+// LobbyParticipant is the privacy-limited roster a visitor may see before joining.
+type LobbyParticipant struct {
+	ParticipantID utilities.ID
+	DisplayName   string
+	IdentityKind  string
+}
+
+func (s Service) ListLobbyParticipants(ctx context.Context, tenantID, spaceID utilities.ID) ([]LobbyParticipant, error) {
+	if err := validateIDs(tenantID, spaceID); err != nil {
+		return nil, err
+	}
+	return s.repository.ListLobbyParticipants(ctx, tenantID, spaceID)
 }
 
 type Service struct {

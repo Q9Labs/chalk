@@ -1,4 +1,4 @@
-import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { LobbyParticipants, usePreJoinDevices, type LobbyParticipant, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
@@ -41,10 +41,17 @@ export type PreJoinProps = {
   /** The visitor pressed Join: fields lock and the preview keeps running until the call replaces this step. */
   readonly joining: boolean;
   readonly onJoin: (devices: PreJoinJoinOptions) => void;
+  readonly participants?: readonly LobbyParticipant[];
 };
 
+/** Who is already in the call. Nothing shows until the roster is known, and an empty roster says so. */
+function Lobby({ participants }: { readonly participants?: readonly LobbyParticipant[] }) {
+  if (participants?.length === 0) return <p className="m-0 text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">Nobody else is here yet</p>;
+  return <LobbyParticipants participants={participants} />;
+}
+
 /** The step before the call: see yourself, hear yourself, press Join. */
-export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin }: PreJoinProps) {
+export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin, participants }: PreJoinProps) {
   const devices = usePreJoinDevices();
   const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
@@ -70,6 +77,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
+  const lobby = <Lobby participants={participants} />;
   const preview = (
     <>
       <ShellStyles />
@@ -128,6 +136,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
       <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-[var(--chalk-app-canvas)] px-5 pt-6 text-[var(--chalk-app-text)]">
         <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-3">
           {title}
+          {lobby}
           {preview}
           {rows}
           <div className="flex flex-1 flex-col justify-end">{form}</div>
@@ -144,6 +153,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         </div>
         <div className="flex h-[338px] flex-col justify-center gap-5">
           {title}
+          {lobby}
           {form}
         </div>
       </div>

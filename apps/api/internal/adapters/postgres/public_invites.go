@@ -34,6 +34,7 @@ type publicInviteQuerier interface {
 	GetSpacePublicInvite(context.Context, sqlc.GetSpacePublicInviteParams) (sqlc.SpacePublicInvite, error)
 	GetSpacePublicInviteByHandle(context.Context, []byte) (sqlc.SpacePublicInvite, error)
 	GetSpacePublicInviteByCode(context.Context, string) (sqlc.SpacePublicInvite, error)
+	ListSpaceLobbyParticipants(context.Context, sqlc.ListSpaceLobbyParticipantsParams) ([]sqlc.ListSpaceLobbyParticipantsRow, error)
 	ListDueAutoSpaceLifecycles(context.Context, sqlc.ListDueAutoSpaceLifecyclesParams) ([]sqlc.AutoSpaceLifecycle, error)
 	ListPendingSpacePublicAdmissionRequests(context.Context, sqlc.ListPendingSpacePublicAdmissionRequestsParams) ([]sqlc.ListPendingSpacePublicAdmissionRequestsRow, error)
 	LockSpacePublicAdmissionRequest(context.Context, sqlc.LockSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
@@ -890,5 +891,3 @@ func publicInviteNullableString(value pgtype.Text) string {
 	}
 	return value.String
 }
-
-func nullableErrorFamily(value string) pgtype.Text { return textValue(value) }
