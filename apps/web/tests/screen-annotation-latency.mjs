@@ -106,7 +106,7 @@ await runJourney("screen-annotation-latency", async ({ step, person, startCall, 
     await sharer.page.bringToFront();
     await control(sharer, "Share screen");
     await sharer.page.getByRole("button", { name: "Pop out marks", exact: true }).click(timeout);
-    await drawer.page.getByRole("button", { name: "Annotate", exact: true }).click(timeout);
+    await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(timeout);
     await drawer.page.getByRole("button", { name: "Ink colour and width" }).click();
     await drawer.page.getByLabel("Ink colour", { exact: true }).fill("#ff00ff");
     await drawer.page.keyboard.press("Escape");

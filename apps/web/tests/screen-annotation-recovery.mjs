@@ -37,7 +37,7 @@ function recent(log, type, predicate = () => true) {
 }
 
 async function tapInk(page, y) {
-  const open = page.getByRole("button", { name: "Annotate", exact: true });
+  const open = page.getByRole("button", { name: "Draw", exact: true });
   if (await open.isVisible()) await open.click();
   await page.getByRole("button", { name: "More", exact: true }).click();
   const fade = page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });

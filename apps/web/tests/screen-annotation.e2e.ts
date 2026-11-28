@@ -41,7 +41,7 @@ function inkCenterY() {
 
 async function openAnnotationFixture(browser: Browser, screen: Screen) {
   await browser.goto("/call-states.html?state=screen-annotation");
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
+  await screen.getByRole("button", "Draw", { exact: true }).click();
   return annotationBounds(browser);
 }
 
@@ -109,7 +109,7 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
     return Boolean(button);
   });
   await browser.mouse.up();
-  await expect(screen.getByRole("button", "Annotate", { exact: true })).not.toBeVisible();
+  await expect(screen.getByRole("button", "Draw", { exact: true })).not.toBeVisible();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
   await screen.getByRole("button", "Raise hand to draw", { exact: true }).click();
   await expect(screen.getByRole("button", "Request sent", { exact: true })).toBeDisabled();
@@ -120,7 +120,7 @@ test("revoke during a gesture, raise a hand to draw, approve and fall back when 
   await screen.getByRole("button", "Allow Omar to draw", { exact: true }).click();
   await browser.keyboard.press("Escape");
   await screen.getByRole("button", "View as Omar", { exact: true }).click();
-  await screen.getByRole("button", "Annotate", { exact: true }).click();
+  await screen.getByRole("button", "Draw", { exact: true }).click();
   await screen.getByRole("button", "More", { exact: true }).click();
   await screen.getByRole("menuitemcheckbox", "Marks fade after a few seconds").click();
   await browser.keyboard.press("Escape");
@@ -158,7 +158,7 @@ async function chooseShare(page: Page, source: "Window" | "Entire screen", insta
 }
 
 async function drawLiveMark(page: Page) {
-  await page.getByRole("button", { name: "Annotate", exact: true }).click();
+  await page.getByRole("button", { name: "Draw", exact: true }).click();
   const box = await page.locator(canvas).boundingBox();
   if (!box) throw new Error("No annotation canvas on the received screen share");
   const y = box.y + box.height * 0.42;
@@ -218,7 +218,7 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-prompt.png") });
     await helperCard(host).getByRole("button", { name: "Not now", exact: true }).click();
     await helperCard(host).waitFor({ state: "hidden" });
-    await mobile.getByRole("button", { name: "Annotate", exact: true }).waitFor();
+    await mobile.getByRole("button", { name: "Draw", exact: true }).waitFor();
     expect(await helperCard(mobile).count()).toBe(0);
     await drawLiveMark(guest);
     await helperCard(host)
@@ -267,7 +267,7 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
 
     await chooseShare(mobile, "Window");
     await mobile.locator('[data-part="screen-annotation-controls"][data-local]').waitFor();
-    await host.getByRole("button", { name: "Annotate", exact: true }).waitFor();
+    await host.getByRole("button", { name: "Draw", exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "web-viewer-annotate.png") });
     await drawLiveMark(host);
     expect(await helperCard(mobile).count()).toBe(0);
