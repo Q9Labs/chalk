@@ -71,7 +71,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
-  const lobby = <LobbyParticipants participants={participants} />;
+  const lobby = participants?.length === 0 ? <p className="m-0 text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">Nobody else is here yet</p> : <LobbyParticipants participants={participants} />;
   const preview = (
     <>
       <ShellStyles />

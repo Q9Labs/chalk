@@ -14,7 +14,7 @@ function ParticipantAvatar({ participant }: { readonly participant: LobbyPartici
   if (participant.identityKind !== "agent") return <Avatar name={participant.displayName} size="xs" generated animated={false} style={{ width: 28, height: 28 }} className="ring-2 ring-[var(--chalk-app-canvas)]" />;
   return (
     <span aria-hidden="true" className="inline-grid size-7 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--chalk-accent)_14%,var(--chalk-app-canvas))] text-[var(--chalk-accent)] ring-2 ring-[var(--chalk-app-canvas)]">
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3zM12.5 11l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5L10.5 13l1.5-.5z" />
       </svg>
     </span>
