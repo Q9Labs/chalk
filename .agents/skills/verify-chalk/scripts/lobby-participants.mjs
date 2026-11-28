@@ -26,6 +26,13 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     });
     if (!response.ok) throw new Error("admitting " + name + " answered HTTP " + response.status + " " + ((await response.json().catch(() => null))?.error?.code ?? ""));
   };
+  // The app reads its theme from a cookie, so the page follows only after a reload.
+  const setTheme = async (who, theme) => {
+    await who.context.addCookies([{ name: "chalk_theme", value: theme, url: web }]);
+    await who.page.reload();
+    await lobbyLine(who).waitFor({ timeout: 30_000 });
+    await who.page.waitForTimeout(600);
+  };
   const lobbyLine = (who) => who.page.getByTestId("lobby.names");
   const aiBadges = (who) => lobbyLine(who).locator("[aria-label='AI participant']");
 
@@ -57,20 +64,19 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     if ((await aiBadges(guest).count()) !== 2) throw new Error("expected two AI badges in the lobby line");
     if ((await guest.page.getByText("Only you see this").count()) > 0) throw new Error("the Only you see this pill is still there");
     if ((await guest.page.getByText(/transcribe/i).count()) > 0) throw new Error("a transcription notice is showing");
-    await shot(guest, "lobby-light");
-    await guest.page.emulateMedia({ colorScheme: "dark" });
+    await setTheme(guest, "dark");
     await shot(guest, "lobby-dark");
-    await guest.page.emulateMedia({ colorScheme: "light" });
+    await setTheme(guest, "light");
+    await shot(guest, "lobby-light");
   });
 
   await step("a phone visitor sees the same line", async () => {
     await phone.page.goto(call.link);
     await lobbyLine(phone).waitFor({ timeout: 30_000 });
-    await shot(phone, "lobby-phone-light");
-    await phone.page.emulateMedia({ colorScheme: "dark" });
-    await phone.page.waitForTimeout(800);
+    await setTheme(phone, "dark");
     await shot(phone, "lobby-phone-dark");
-    await phone.page.emulateMedia({ colorScheme: "light" });
+    await setTheme(phone, "light");
+    await shot(phone, "lobby-phone-light");
   });
 
   await step("with more people the line names the AI participants and counts the others, and the list opens", async () => {
@@ -78,16 +84,18 @@ await runJourney("lobby-participants", async ({ step, person, startCall, leave, 
     await admit("Priya Raman", "user");
     await admit("Tomás Herrera", "user");
     for (const who of [guest, phone]) {
-      await who.page.reload();
-      await lobbyLine(who).waitFor({ timeout: 30_000 });
-      const text = (await lobbyLine(who).textContent()) ?? "";
-      if (!/3 others/.test(text)) throw new Error("the lobby line is " + JSON.stringify(text) + ", expected 3 others");
-      await shot(who, "lobby-crowd");
-      await who.page.getByTestId("lobby.others").click();
-      await who.page.getByText(/^\d+ in this call$/).waitFor({ timeout: 10_000 });
-      await who.page.waitForTimeout(600);
-      await shot(who, "lobby-crowd-open");
-      await who.page.keyboard.press("Escape");
+      for (const theme of ["light", "dark"]) {
+        await setTheme(who, theme);
+        const text = (await lobbyLine(who).textContent()) ?? "";
+        if (!/3 others/.test(text)) throw new Error("the lobby line is " + JSON.stringify(text) + ", expected 3 others");
+        await shot(who, "lobby-crowd-" + theme);
+        await who.page.getByTestId("lobby.others").click();
+        await who.page.getByText(/^\d+ in this call$/).waitFor({ timeout: 10_000 });
+        await who.page.waitForTimeout(700);
+        await shot(who, "lobby-crowd-open-" + theme);
+        await who.page.keyboard.press("Escape");
+        await who.page.waitForTimeout(300);
+      }
     }
   });
 
