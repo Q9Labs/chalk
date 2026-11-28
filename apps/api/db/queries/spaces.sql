@@ -90,7 +90,7 @@ returning *
                 'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
                 'requestMediaOthers', 'removeParticipant', 'manageRecording',
                 'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-                'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
+                'clearSpaceContent'
             ]::text[]
         ),
         (
@@ -164,7 +164,7 @@ values
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
+        'clearSpaceContent'
     ]::text[]
 ),
 (
