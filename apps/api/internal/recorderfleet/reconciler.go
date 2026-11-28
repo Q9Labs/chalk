@@ -228,13 +228,8 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 		if err != nil {
 			return state, Result{}, true, fmt.Errorf("confirm missing recorder node: %w", errors.Join(ErrProviderUnavailable, err))
 		}
-		if exists && managed.Phase == PhaseDeleting {
-			// The provider drops a deleted node from its tag listing before the
-			// node itself answers 404, so keep the row until the 404 confirms it.
-			return state, Result{Action: ActionNone, ProviderNodeID: providerID}, true, nil
-		}
 		if exists {
-			return state, Result{}, true, fmt.Errorf("%w: missing_inventory_node_exists provider_id=%q", ErrInventoryDrift, providerID)
+			return missingNodeStillServed(state, managed)
 		}
 		if managed.Identity != nil && managed.Phase != PhaseIdentityRevoked && managed.Phase != PhaseDeleting {
 			observation, err := r.observeIdentity(ctx, *managed.Identity)
