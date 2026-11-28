@@ -3,6 +3,7 @@ import type { ScreenAnnotationMark, ScreenAnnotationPoint } from "@q9labsai/chal
 import { annotationFont, type AnnotationCanvasContext } from "./canvas";
 import { containsPoint, intersectRects, projectFramePoint, type AnnotationPoint, type AnnotationRect } from "./geometry";
 import { HIGHLIGHTER_OPACITY, NOTE_COLOR, NOTE_OPACITY, annotationMarkOpacity, compareAnnotationMarks, layoutAnnotationText, projectAnnotationMark, type AnnotationMarkGeometry } from "./mark-geometry";
+import { firstName, labelUnit, markAnchor, paintNameTag, roundedRect } from "./label";
 import { LASER_TRAIL_MS, type AnnotationPresence } from "./presence";
 
 export type PaintAnnotationOptions = {
@@ -35,20 +36,7 @@ export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rec
     ctx.rect(visible.x, visible.y, visible.width, visible.height);
     ctx.clip();
 
-    const named: { readonly geometry: AnnotationMarkGeometry; readonly name: string; readonly opacity: number }[] = [];
-    for (const mark of [...marks].sort(compareAnnotationMarks)) {
-      if (paused && mark.author.participant_id !== sharerId) continue;
-      const opacity = annotationMarkOpacity(mark, nowMs);
-      if (opacity <= 0) continue;
-      const geometry = projectAnnotationMark(rect, mark.draft);
-      paintMark(ctx, geometry, opacity);
-      if (nameMarksExcept !== undefined && mark.author.participant_id !== nameMarksExcept) named.push({ geometry, name: firstName(mark.author.display_name), opacity });
-    }
-    const unit = labelUnit(rect);
-    for (const { geometry, name, opacity } of named) {
-      ctx.globalAlpha = opacity;
-      paintNameTag(ctx, visible, markAnchor(geometry), name, geometry.color, unit);
-    }
+    paintCommittedMarks(ctx, { rect, clip: visible, sharerId, paused, marks, nameMarksExcept, nowMs });
 
     const live = presence.filter((sample) => sample.expires_at_ms > nowMs && (!paused || sample.author.participant_id === sharerId));
     const acceptedIds = new Set(marks.map((mark) => mark.draft.mark_id));
@@ -58,21 +46,39 @@ export function paintAnnotation(ctx: AnnotationCanvasContext, { rect, clip = rec
     for (const sample of live) {
       paintCursor(ctx, rect, visible, sample, nowMs);
     }
-    if (localTouch) {
-      const point = projectFramePoint(rect, localTouch);
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 12, 0, Math.PI * 2);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#000a";
-      ctx.stroke();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "#fff";
-      ctx.stroke();
-    }
+    if (localTouch) paintLocalTouch(ctx, projectFramePoint(rect, localTouch));
   } finally {
     ctx.restore();
   }
+}
+
+function paintCommittedMarks(ctx: AnnotationCanvasContext, { rect, clip, sharerId, paused, marks, nameMarksExcept, nowMs }: Pick<PaintAnnotationOptions, "rect" | "sharerId" | "paused" | "marks" | "nameMarksExcept" | "nowMs"> & { readonly clip: AnnotationRect }): void {
+  const named: { readonly geometry: AnnotationMarkGeometry; readonly name: string; readonly opacity: number }[] = [];
+  for (const mark of [...marks].sort(compareAnnotationMarks)) {
+    if (paused && mark.author.participant_id !== sharerId) continue;
+    const opacity = annotationMarkOpacity(mark, nowMs);
+    if (opacity <= 0) continue;
+    const geometry = projectAnnotationMark(rect, mark.draft);
+    paintMark(ctx, geometry, opacity);
+    if (nameMarksExcept !== undefined && mark.author.participant_id !== nameMarksExcept) named.push({ geometry, name: firstName(mark.author.display_name), opacity });
+  }
+  const unit = labelUnit(rect);
+  for (const { geometry, name, opacity } of named) {
+    ctx.globalAlpha = opacity;
+    paintNameTag(ctx, clip, markAnchor(geometry), name, geometry.color, unit);
+  }
+}
+
+function paintLocalTouch(ctx: AnnotationCanvasContext, point: AnnotationPoint): void {
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 12, 0, Math.PI * 2);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#000a";
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#fff";
+  ctx.stroke();
 }
 
 function paintMark(ctx: AnnotationCanvasContext, geometry: AnnotationMarkGeometry, opacity: number): void {
@@ -163,24 +169,6 @@ function paintShape(ctx: AnnotationCanvasContext, kind: "box" | "circle", bounds
   ctx.stroke();
 }
 
-function roundedRect(ctx: AnnotationCanvasContext, bounds: AnnotationRect, radius: number): void {
-  const { x, y, width, height } = bounds;
-  const r = Math.min(radius, width / 2, height / 2);
-  const right = x + width;
-  const bottom = y + height;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(right - r, y);
-  ctx.arc(right - r, y + r, r, -Math.PI / 2, 0);
-  ctx.lineTo(right, bottom - r);
-  ctx.arc(right - r, bottom - r, r, 0, Math.PI / 2);
-  ctx.lineTo(x + r, bottom);
-  ctx.arc(x + r, bottom - r, r, Math.PI / 2, Math.PI);
-  ctx.lineTo(x, y + r);
-  ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
-  ctx.closePath();
-}
-
 function tracePath(ctx: AnnotationCanvasContext, points: readonly AnnotationPoint[]): boolean {
   const first = points[0];
   if (!first) return false;
@@ -242,61 +230,6 @@ function paintCursor(ctx: AnnotationCanvasContext, rect: AnnotationRect, clip: A
 
   if (!containsPoint(clip, point)) return;
   paintNameTag(ctx, clip, { x: point.x + 9 * unit, y: point.y + 12 * unit }, firstName(sample.author.display_name), color, unit);
-}
-
-function labelUnit(rect: AnnotationRect): number {
-  return Math.max(0.7, Math.min(1.5, rect.width / 1000));
-}
-
-export function firstName(displayName: string): string {
-  return displayName.trim().split(/\s+/u)[0] || displayName;
-}
-
-/** A pill in the author's ink with the name in black or white, whichever reads better on that ink. */
-function paintNameTag(ctx: AnnotationCanvasContext, clip: AnnotationRect, at: AnnotationPoint, name: string, color: string, unit: number): void {
-  ctx.font = annotationFont(11 * unit);
-  const width = ctx.measureText(name).width + 12 * unit;
-  const height = 18 * unit;
-  const x = Math.max(clip.x, Math.min(at.x, clip.x + clip.width - width));
-  const y = Math.max(clip.y, Math.min(at.y, clip.y + clip.height - height));
-  ctx.fillStyle = color;
-  roundedRect(ctx, { x, y, width, height }, height / 2);
-  ctx.fill();
-  ctx.fillStyle = inkIsLight(color) ? "#0b0b0d" : "#ffffff";
-  ctx.fillText(name, x + 6 * unit, y + height / 2);
-}
-
-function inkIsLight(color: string): boolean {
-  const hex = /^#([0-9a-f]{6})$/iu.exec(color)?.[1];
-  if (!hex) return true;
-  const [r, g, b] = [0, 2, 4].map((offset) => {
-    const channel = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
-    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  const luminance = 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
-  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05);
-}
-
-/** Where a mark's name sits: just past where the stroke ended, or below and right of a shape. */
-function markAnchor(geometry: AnnotationMarkGeometry): AnnotationPoint {
-  const gap = geometry.width / 2 + 4;
-  switch (geometry.kind) {
-    case "pen":
-    case "highlighter": {
-      const end = geometry.points.at(-1) ?? { x: 0, y: 0 };
-      return { x: end.x + gap, y: end.y + gap };
-    }
-    case "line":
-    case "arrow":
-      return { x: geometry.to.x + gap, y: geometry.to.y + gap };
-    case "box":
-    case "circle":
-      return { x: geometry.bounds.x + geometry.bounds.width + gap, y: geometry.bounds.y + geometry.bounds.height + gap };
-    case "text":
-      return { x: geometry.at.x, y: geometry.at.y + geometry.fontSize };
-    case "stamp":
-      return { x: geometry.at.x + geometry.radius, y: geometry.at.y + geometry.radius };
-  }
 }
 
 function paintLaserTrail(ctx: AnnotationCanvasContext, rect: AnnotationRect, trail: NonNullable<AnnotationPresence["laserTrail"]>, nowMs: number, unit: number, color: string): void {

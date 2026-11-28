@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { runJourney } from "../../../.agents/skills/verify-chalk/scripts/journey.mjs";
+import { keepMarks } from "./screen-annotation-support.mjs";
 
 const canvasSelector = '[data-part="screen-annotation-layer"]';
 const wait = { timeout: 35_000 };
@@ -16,10 +17,7 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
     await Promise.all([joinByLink(drawer, call.link), joinByLink(observer, call.link)]);
     await control(sharer, "Share screen");
     await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
-    await drawer.page.getByRole("button", { name: "More", exact: true }).click();
-    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
-    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
-    await drawer.page.keyboard.press("Escape");
+    await keepMarks(drawer.page);
     const bounds = await drawer.page.locator(canvasSelector).first().boundingBox(wait);
     assert.ok(bounds, "viewer has an annotation canvas");
     const { x, y, width, height } = bounds;

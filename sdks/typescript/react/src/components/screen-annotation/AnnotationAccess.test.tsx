@@ -40,12 +40,14 @@ it("offers Draw when the viewer may draw", () => {
 });
 
 it("offers Ask to draw under Ask first, then shows the pending ask with the sharer's first name", () => {
-  const asks = vi.fn();
-  const host = render(stateWith({ draw_policy: "picked", can_draw: false }), asks);
+  let asked = 0;
+  const host = render(stateWith({ draw_policy: "picked", can_draw: false }), () => {
+    asked += 1;
+  });
   const button = host.querySelector("button");
   expect(button?.textContent).toBe("Ask to draw");
   act(() => button?.click());
-  expect(asks).toHaveBeenCalledOnce();
+  expect(asked).toBe(1);
 
   document.body.replaceChildren();
   const pending = render(stateWith({ draw_policy: "picked", can_draw: false, requests: [{ request_id: "r", participant_id: me, expires_at_ms: 5000 }] }));

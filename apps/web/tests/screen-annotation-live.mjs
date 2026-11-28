@@ -1,4 +1,5 @@
 import { runJourney } from "../../../.agents/skills/verify-chalk/scripts/journey.mjs";
+import { keepMarks } from "./screen-annotation-support.mjs";
 
 const canvasSelector = '[data-part="screen-annotation-layer"]';
 const wait = { timeout: 35_000 };
@@ -32,10 +33,7 @@ await runJourney("screen-annotation-live", async ({ step, person, startCall, joi
 
   await step("A viewer's kept mark appears in a second browser", async () => {
     await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
-    await drawer.page.getByRole("button", { name: "More", exact: true }).click();
-    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
-    if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
-    await drawer.page.keyboard.press("Escape");
+    await keepMarks(drawer.page);
     const canvas = drawer.page.locator(canvasSelector).first();
     const bounds = await canvas.boundingBox(wait);
     if (!bounds) throw new Error("The drawer has no annotation plane.");

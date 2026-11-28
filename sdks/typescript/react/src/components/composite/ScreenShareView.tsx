@@ -7,10 +7,9 @@ import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "rea
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { AIBadge } from "../atomic/AIBadge";
-import { ChalkButton } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
-import { SignalBars } from "../participant-tile/ParticipantTile";
+import { ShareError, ShareStatusOverlay } from "./ShareStatusOverlay";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
 import type { AnnotationPresentationContext } from "../screen-annotation/AnnotationSurface";
@@ -185,35 +184,7 @@ export function ScreenSharePresentation({
               />
             </Suspense>
           ) : null}
-          {poppedOut ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
-              <StageIcon name="pip" size={32} />
-              <p className="font-medium text-[var(--chalk-text)]">{name} is in a picture-in-picture window</p>
-              <ChalkButton className="!h-8 !px-3" onClick={() => void popout()}>
-                Bring it back
-              </ChalkButton>
-            </div>
-          ) : null}
-          {status === "connecting" ? (
-            <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
-              <span className="h-[18px] w-[18px] rounded-[50%] border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
-              <p className="font-medium text-[var(--chalk-text)]">Connecting to {sharedByName}’s screen…</p>
-            </div>
-          ) : null}
-          {status === "paused" ? (
-            <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-[var(--chalk-on-overlay)]">
-              <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[var(--chalk-overlay-strong)]">
-                <StageIcon name="pause" size={24} />
-              </span>
-              <p className="rounded-(--corner-lg) bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
-            </div>
-          ) : null}
-          {status === "low-quality" ? (
-            <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-(--corner-md) bg-[var(--chalk-overlay-strong)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-on-overlay)]">
-              <SignalBars />
-              <span>{sharedByName}’s connection is slow</span>
-            </div>
-          ) : null}
+          <ShareStatusOverlay status={status} poppedOut={poppedOut} name={name} sharedByName={sharedByName} onBringBack={() => void popout()} />
           {primary ? switcher : null}
           {primary && !isLocal && status !== "connecting" ? (
             <div role="toolbar" aria-label="Share controls" className={cn("absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100", controlsOpen && "opacity-100")}>
@@ -231,11 +202,7 @@ export function ScreenSharePresentation({
               </ShareControl>
             </div>
           ) : null}
-          {error ? (
-            <p role="alert" className="absolute right-2 bottom-12 left-2 z-40 rounded-md bg-[var(--chalk-overlay-strong)] p-2 text-sm text-[var(--chalk-on-overlay)]">
-              {error}
-            </p>
-          ) : null}
+          {error ? <ShareError message={error} /> : null}
         </div>
       </div>
     </TileShell>

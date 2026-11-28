@@ -5,7 +5,8 @@ export type { AnnotationMarkGeometry, AnnotationTextMeasure } from "./mark-geome
 export { createAnnotationPresenceTracker, LASER_TRAIL_MS } from "./presence";
 export type { AnnotationLaserSample, AnnotationPresence } from "./presence";
 export { annotationFont, canvasAnnotationTextMeasure, type AnnotationCanvasContext } from "./canvas";
-export { firstName, paintAnnotation, type PaintAnnotationOptions } from "./paint";
+export { firstName } from "./label";
+export { paintAnnotation, type PaintAnnotationOptions } from "./paint";
 export { hitTestAnnotation } from "./hit-test";
 export type { HitTestAnnotationOptions } from "./hit-test";
 export { freezeAnnotationFrame } from "./frame";
