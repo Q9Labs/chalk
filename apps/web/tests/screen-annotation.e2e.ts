@@ -74,7 +74,7 @@ test("draw, fade, keep, undo, redo, save, download and clear a matched publicati
   await expect.poll(() => browser.evaluate(hasInk), { timeout: 3500 }).toBe(false);
 
   await screen.getByRole("button", "More", { exact: true }).click();
-  await screen.getByRole("menuitemcheckbox", "Marks fade after a few seconds").click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade").click();
   await browser.keyboard.press("Escape");
   const fitY = 0.34;
   await stroke(browser, fitY);
@@ -117,7 +117,7 @@ test("revoke during a gesture, ask first, allow, then the sharer shows marks thr
   await expect(screen.getByRole("button", "Draw", { exact: true })).not.toBeVisible();
   await expect.poll(() => browser.evaluate(hasInk)).toBe(false);
   await screen.getByRole("button", "Ask to draw", { exact: true }).click();
-  await expect(browser.locator('[role="status"]').filter({ hasText: "Asked Sara to let you draw" })).toBeVisible();
+  await expect(browser.locator('[role="status"]').filter({ hasText: "Asked Sara" })).toBeVisible();
   await app.screenshot("viewer-request");
 
   await screen.getByRole("button", "View as Sara", { exact: true }).click();
@@ -125,7 +125,7 @@ test("revoke during a gesture, ask first, allow, then the sharer shows marks thr
   await screen.getByRole("button", "View as Omar", { exact: true }).click();
   await screen.getByRole("button", "Draw", { exact: true }).click();
   await screen.getByRole("button", "More", { exact: true }).click();
-  await screen.getByRole("menuitemcheckbox", "Marks fade after a few seconds").click();
+  await screen.getByRole("menuitemcheckbox", "Marks fade").click();
   await browser.keyboard.press("Escape");
   await stroke(browser);
   await screen.getByRole("button", "View as Sara", { exact: true }).click();
@@ -134,7 +134,7 @@ test("revoke during a gesture, ask first, allow, then the sharer shows marks thr
 
 test("the sharer connects Chalk Helper to show marks on their own screen", async ({ app, browser, screen }) => {
   await browser.goto("/call-states.html?state=share-sharer-helper");
-  await screen.getByRole("button", "Show marks on my screen", { exact: true }).click();
+  await screen.getByRole("button", "Show on my screen", { exact: true }).click();
   await screen.getByRole("button", "Connect Chalk Helper", { exact: true }).click();
   await expect(browser.locator('[role="status"]').filter({ hasText: "Couldn’t reach Chalk Helper on this device." })).toBeVisible();
   await browser.locator("input[autocomplete=off]").fill("HJKX-4821");

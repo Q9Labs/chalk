@@ -17,7 +17,7 @@ import Undo02Icon from "@hugeicons/core-free-icons/Undo02Icon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ANNOTATION_SWATCHES } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationCommand } from "@q9labsai/chalk-client";
-import { useId, type ComponentProps, type ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ChalkMenu, ChalkMenuPrimitive as Menu, ChalkPopover, ChalkTooltip } from "../chalk-ui";
 import { penWidth, type AnnotationBrush, type AnnotationStamp, type AnnotationTool } from "./model";
 
@@ -50,20 +50,25 @@ export interface ScreenAnnotationToolbarProps {
   readonly onDone: () => void;
 }
 
-/** The one compact bar a person draws with. A phone drops the highlighter, text and undo. */
+const widths = [
+  { label: "Thin", scale: 0.5, height: 3 },
+  { label: "Medium", scale: 1, height: 6 },
+  { label: "Thick", scale: 2.5, height: 10 },
+];
+
+/** The drawing tools in the share header. A phone moves Text into More. */
 export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBrushChange, onCommand, onSave, onDownload, onDone }: ScreenAnnotationToolbarProps): React.JSX.Element {
   const paint = brush.color ?? defaultColor;
   const pick = (tool: AnnotationTool) => onBrushChange({ ...brush, tool, width: penWidth(tool) });
   const shape = shapes.find((entry) => entry.tool === brush.tool);
-  const widthId = useId();
   return (
-    <div role="toolbar" aria-label="Drawing tools" data-part="screen-annotation-toolbar" className="chalk-ann-bar">
+    <div role="toolbar" aria-label="Drawing tools" data-part="screen-annotation-toolbar" className="chalk-hd-tools">
       <ToolButton label="Laser pointer" pressed={brush.tool === "pointer"} onClick={() => pick("pointer")} icon={Cursor01Icon} />
       <ToolButton label="Pen" pressed={brush.tool === "pen"} onClick={() => pick("pen")} icon={PencilEdit02Icon} />
-      {phone ? null : <ToolButton label="Highlighter" pressed={brush.tool === "highlighter"} onClick={() => pick("highlighter")} icon={HighlighterIcon} />}
+      <ToolButton label="Highlighter" pressed={brush.tool === "highlighter"} onClick={() => pick("highlighter")} icon={HighlighterIcon} />
       <ChalkPopover
         label="Shapes"
-        side="top"
+        side="bottom"
         trigger={
           <button type="button" className="chalk-ann-btn" aria-label="Shapes" aria-pressed={Boolean(shape) || brush.tool === "stamp"}>
             <HugeiconsIcon icon={shape?.icon ?? ShapesIcon} size={18} aria-hidden="true" />
@@ -90,7 +95,7 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBr
       <span aria-hidden="true" className="chalk-ann-sep" />
       <ChalkPopover
         label="Colour"
-        side="top"
+        side="bottom"
         trigger={
           <button type="button" className="chalk-ann-btn" aria-label="Colour">
             <span aria-hidden="true" className="chalk-ann-dot" style={{ backgroundColor: paint }} />
@@ -104,50 +109,53 @@ export function ScreenAnnotationToolbar({ brush, defaultColor, phone, busy, onBr
             </button>
           ))}
         </div>
-        <label htmlFor={widthId} className="chalk-ann-slider">
-          <span className="chalk-ann-heading">Stroke width</span>
-          <input id={widthId} type="range" min={32} max={3277} step={1} value={brush.width} onChange={(event) => onBrushChange({ ...brush, width: event.target.valueAsNumber })} />
-        </label>
+        <div className="chalk-ann-width" role="group" aria-label="Stroke width">
+          {widths.map(({ label, scale, height }) => {
+            const width = Math.round(penWidth(brush.tool) * scale);
+            return (
+              <button key={label} type="button" aria-label={label} aria-pressed={brush.width === width} onClick={() => onBrushChange({ ...brush, width })}>
+                <i style={{ height }} />
+              </button>
+            );
+          })}
+        </div>
       </ChalkPopover>
-      {phone ? null : <ToolButton label="Undo" onClick={() => onCommand({ kind: "undo" })} icon={Undo02Icon} />}
+      <ToolButton label="Undo" onClick={() => onCommand({ kind: "undo" })} icon={Undo02Icon} />
       <ChalkMenu
-        side="top"
+        side="bottom"
         trigger={
           <button type="button" className="chalk-ann-btn" aria-label="More">
             <HugeiconsIcon icon={MoreHorizontalIcon} size={18} aria-hidden="true" />
           </button>
         }
       >
-        <Menu.CheckboxItem className="chalk-menu-item" checked={!brush.keep} onCheckedChange={(fade) => onBrushChange({ ...brush, keep: !fade })} closeOnClick={false}>
-          <span>Marks fade after a few seconds</span>
-          <span className="chalk-shell-menu-switch" aria-hidden="true">
-            <span className="chalk-switch" aria-checked={!brush.keep}>
-              <span />
-            </span>
-          </span>
-        </Menu.CheckboxItem>
         {phone ? (
-          <Menu.Item className="chalk-menu-item" onClick={() => onCommand({ kind: "undo" })}>
-            <HugeiconsIcon icon={Undo02Icon} size={18} aria-hidden="true" />
-            Undo
+          <Menu.Item className="chalk-menu-item" onClick={() => pick("text")}>
+            <HugeiconsIcon icon={TextFontIcon} size={18} aria-hidden="true" />
+            Text
           </Menu.Item>
         ) : null}
         <Menu.Item className="chalk-menu-item" onClick={() => onCommand({ kind: "redo" })}>
           <HugeiconsIcon icon={Redo02Icon} size={18} aria-hidden="true" />
           Redo
         </Menu.Item>
+        <Menu.CheckboxItem className="chalk-menu-item" checked={!brush.keep} onCheckedChange={(fade) => onBrushChange({ ...brush, keep: !fade })} closeOnClick={false}>
+          <span>Marks fade</span>
+          <span className="chalk-shell-menu-switch" aria-hidden="true">
+            <span className="chalk-switch" aria-checked={!brush.keep}>
+              <span />
+            </span>
+          </span>
+        </Menu.CheckboxItem>
         <Menu.Item className="chalk-menu-item" onClick={() => onCommand({ kind: "clear", scope: { kind: "mine" } })}>
           <HugeiconsIcon icon={Delete02Icon} size={18} aria-hidden="true" />
           Clear my marks
         </Menu.Item>
         {onSave || onDownload ? <Menu.Separator className="chalk-shell-menu-separator" /> : null}
         {onSave ? (
-          <Menu.Item className="chalk-menu-item chalk-shell-source" disabled={busy} onClick={onSave}>
+          <Menu.Item className="chalk-menu-item" disabled={busy} onClick={onSave}>
             <HugeiconsIcon icon={Image01Icon} size={18} aria-hidden="true" />
-            <span className="chalk-shell-device-label">
-              <span>Save to board</span>
-              <small>Screen and marks as one image</small>
-            </span>
+            Save to board
           </Menu.Item>
         ) : null}
         {onDownload ? (

@@ -1,4 +1,5 @@
 import { LocalShareControls } from "./LocalShareControls";
+import { ShareViewerHeader } from "./ShareViewerHeader";
 import { ShareControl } from "./ShareControl";
 import { commandFailure, commandFailureMessage, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
@@ -76,6 +77,8 @@ export function ScreenSharePresentation({
 }: ScreenSharePresentationProps): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const [canvasHost, setCanvasHost] = useState<HTMLDivElement | null>(null);
+  const [headerHost, setHeaderHost] = useState<HTMLElement | null>(null);
+  const [titleHost, setTitleHost] = useState<HTMLElement | null>(null);
   const [policyHost, setPolicyHost] = useState<HTMLElement | null>(null);
   const [noticeHost, setNoticeHost] = useState<HTMLElement | null>(null);
   const [fill, setFill] = useState(false);
@@ -112,6 +115,7 @@ export function ScreenSharePresentation({
     };
   }, [media]);
   const ownBigShare = isLocal && primary;
+  const viewerHeader = !isLocal && primary && !hidden && Boolean(annotation && annotationMedia);
   const fullscreen = () =>
     run(async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -134,8 +138,8 @@ export function ScreenSharePresentation({
       hidden={hidden}
       style={style}
       className={cn("h-full w-full", className)}
-      // The own-share bar already names a big local share, so its tag would only repeat it and crowd Stop sharing.
-      chip={ownBigShare ? null : <ShareChip agent={sharedByAgent} name={name} withAudio={!isLocal && hasAudio} />}
+      // The share header already names a big share, so its tag would only repeat it.
+      chip={ownBigShare || viewerHeader ? null : <ShareChip agent={sharedByAgent} name={name} withAudio={!isLocal && hasAudio} />}
     >
       <div
         ref={root}
@@ -148,12 +152,14 @@ export function ScreenSharePresentation({
           <LocalShareControls
             capture={capture}
             pending={pending}
+            titleHost={setTitleHost}
             policyHost={setPolicyHost}
             noticeHost={setNoticeHost}
             onChangeShare={onChangeShare ? (options) => void run(() => onChangeShare(options), "screen", "start") : undefined}
             onStopSharing={onStopSharing ? () => void run(onStopSharing, "screen", "stop") : undefined}
           />
         ) : null}
+        {viewerHeader ? <ShareViewerHeader name={name} withAudio={hasAudio} host={setHeaderHost} /> : null}
         <div className="relative min-h-0 flex-1">
           <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[ease-out]", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
             <div
@@ -176,8 +182,9 @@ export function ScreenSharePresentation({
                 isLocal={isLocal}
                 capture={capture}
                 sharerName={sharedByName}
+                headerHost={headerHost}
+                titleHost={titleHost}
                 policyHost={policyHost}
-                noticeHost={noticeHost}
               />
             </Suspense>
           ) : null}

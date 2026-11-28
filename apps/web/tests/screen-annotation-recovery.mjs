@@ -40,7 +40,7 @@ async function tapInk(page, y) {
   const open = page.getByRole("button", { name: "Draw", exact: true });
   if (await open.isVisible()) await open.click();
   await page.getByRole("button", { name: "More", exact: true }).click();
-  const fade = page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+  const fade = page.getByRole("menuitemcheckbox", { name: "Marks fade" });
   if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
   await page.keyboard.press("Escape");
   const box = await page.locator(canvas).first().boundingBox(wait);

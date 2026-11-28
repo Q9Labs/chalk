@@ -33,7 +33,7 @@ await runJourney("screen-annotation-live", async ({ step, person, startCall, joi
   await step("A viewer's kept mark appears in a second browser", async () => {
     await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
     await drawer.page.getByRole("button", { name: "More", exact: true }).click();
-    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
     if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
     await drawer.page.keyboard.press("Escape");
     const canvas = drawer.page.locator(canvasSelector).first();

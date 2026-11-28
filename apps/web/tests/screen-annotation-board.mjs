@@ -17,7 +17,7 @@ await runJourney("screen-annotation-board", async ({ step, person, startCall, jo
     await control(sharer, "Share screen");
     await drawer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
     await drawer.page.getByRole("button", { name: "More", exact: true }).click();
-    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    const fade = drawer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
     if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
     await drawer.page.keyboard.press("Escape");
     const bounds = await drawer.page.locator(canvasSelector).first().boundingBox(wait);

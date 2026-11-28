@@ -1,9 +1,11 @@
 import { BakedExportProof, type AnnotationFit } from "@q9labsai/chalk-screen-annotation";
 import type { ScreenAnnotationClient, ScreenAnnotationCommand, ScreenAnnotationPresence, ScreenAnnotationState, ScreenShareCapture, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { createPortal } from "react-dom";
 import { usePhoneCall } from "../../internal/call-width";
-import { DrawEntry, SharerNotice, WhoCanDrawMenu, type AnnotationPerson } from "./AnnotationAccess";
+import { DrawEntry, SharerTitle, WhoCanDrawMenu, type AnnotationPerson } from "./AnnotationAccess";
 import { AnnotationPictureInPicture } from "./AnnotationPictureInPicture";
 import { AnnotationTabCue } from "./AnnotationTabCue";
 import { AnnotationHelperOffer } from "./AnnotationHelperOffer";
@@ -34,9 +36,10 @@ type SurfaceProps = AnnotationPresentationContext & {
   readonly isLocal: boolean;
   readonly capture?: ScreenShareCapture;
   readonly sharerName: string;
-  /** Where the sharer's bar above the preview takes the policy pill and the second row. */
+  /** The share header above the preview: the viewer's drawing controls, and the sharer's title line and buttons. */
+  readonly headerHost?: HTMLElement | null;
+  readonly titleHost?: HTMLElement | null;
   readonly policyHost?: HTMLElement | null;
-  readonly noticeHost?: HTMLElement | null;
 };
 
 const noPeople: readonly AnnotationPerson[] = [];
@@ -84,8 +87,9 @@ function ActiveAnnotationSurface({
   actions,
   videoRef,
   canvasHost,
+  headerHost,
+  titleHost,
   policyHost,
-  noticeHost,
   fit,
   track,
   primary,
@@ -145,26 +149,37 @@ function ActiveAnnotationSurface({
           <AnnotationFeedback feedback={feedback} />
           {isLocal && helper ? <AnnotationHelperOffer client={client} state={state} actorId={actorId} helper={helper} capture={capture} open={helperOpen} onOpenChange={setHelperOpen} onShowing={setHelperShowing} /> : null}
           {isLocal ? <AnnotationTabCue client={client} publicationId={state.layer.publication_id} sharerId={state.layer.sharer_id} /> : null}
-          {isLocal ? null : drawingOpen ? (
-            <div onKeyDown={(event) => event.key === "Escape" && setToolsOpen(false)}>
-              <ScreenAnnotationToolbar brush={brush} defaultColor={state.access.default_color} phone={phone} busy={busy} onBrushChange={setBrush} onCommand={run} onSave={saveFrame} onDownload={downloadFrame} onDone={() => setToolsOpen(false)} />
-            </div>
-          ) : (
-            <DrawEntry client={client} state={state} actorId={actorId} sharerName={sharerName} onDraw={() => setToolsOpen(true)} onRequest={() => run({ kind: "request_draw" })} />
-          )}
         </div>
       ) : null}
+      {!isLocal && primary && connected && headerHost
+        ? createPortal(
+            <div className="contents" onKeyDown={(event) => event.key === "Escape" && setToolsOpen(false)}>
+              {drawingOpen ? (
+                <ScreenAnnotationToolbar brush={brush} defaultColor={state.access.default_color} phone={phone} busy={busy} onBrushChange={setBrush} onCommand={run} onSave={saveFrame} onDownload={downloadFrame} onDone={() => setToolsOpen(false)} />
+              ) : (
+                <DrawEntry client={client} state={state} actorId={actorId} sharerName={sharerName} onDraw={() => setToolsOpen(true)} onRequest={() => run({ kind: "request_draw" })} />
+              )}
+            </div>,
+            headerHost,
+          )
+        : null}
+      {isLocal && primary && connected && !phone && titleHost
+        ? createPortal(<SharerTitle client={client} state={state} presence={presence} actorId={actorId} people={people} helperShowing={helperShowing} command={run} />, titleHost)
+        : null}
       {isLocal && primary && connected && !phone && policyHost
         ? createPortal(
             <>
               <WhoCanDrawMenu state={state} command={run} />
               {canPopOut ? <AnnotationPictureInPicture {...presentation} viewerId={actorId} track={track} inTab={safePreview} helperAvailable={helperOffered} /> : null}
+              {helperOffered && !helperShowing ? (
+                <button type="button" className="chalk-ann-pill" onClick={() => setHelperOpen(true)}>
+                  <HugeiconsIcon icon={PencilEdit02Icon} size={16} aria-hidden="true" />
+                  Show on my screen
+                </button>
+              ) : null}
             </>,
             policyHost,
           )
-        : null}
-      {isLocal && primary && connected && !phone && noticeHost
-        ? createPortal(<SharerNotice client={client} state={state} presence={presence} actorId={actorId} people={people} helperOffered={helperOffered} helperShowing={helperShowing} command={run} onShowMarks={() => setHelperOpen(true)} />, noticeHost)
         : null}
     </>
   );

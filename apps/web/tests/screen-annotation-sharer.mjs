@@ -55,7 +55,7 @@ await runJourney("screen-annotation-sharer", async ({ step, person, startCall, j
     const title = await sharer.page.title();
     await viewer.page.getByRole("button", { name: "Draw", exact: true }).click(wait);
     await viewer.page.getByRole("button", { name: "More", exact: true }).click();
-    const fade = viewer.page.getByRole("menuitemcheckbox", { name: "Marks fade after a few seconds" });
+    const fade = viewer.page.getByRole("menuitemcheckbox", { name: "Marks fade" });
     if ((await fade.getAttribute("aria-checked")) === "true") await fade.click();
     await viewer.page.keyboard.press("Escape");
     const bounds = await viewer.page.locator(canvas).first().boundingBox(wait);

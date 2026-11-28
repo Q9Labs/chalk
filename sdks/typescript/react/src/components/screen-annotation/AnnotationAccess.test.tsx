@@ -50,7 +50,7 @@ it("offers Ask to draw under Ask first, then shows the pending ask with the shar
   document.body.replaceChildren();
   const pending = render(stateWith({ draw_policy: "picked", can_draw: false, requests: [{ request_id: "r", participant_id: me, expires_at_ms: 5000 }] }));
   expect(pending.querySelector("button")).toBeNull();
-  expect(pending.textContent).toContain("Asked Nora to let you draw");
+  expect(pending.textContent).toContain("Asked Nora");
 });
 
 it("shows no draw control when only hosts can draw", () => {

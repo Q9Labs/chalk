@@ -20,10 +20,10 @@ type DrawPolicy = ScreenAnnotationState["access"]["draw_policy"];
 
 /** Ask first is the wire policy "picked": people request, and the sharer grants each request. */
 export const policies = [
-  { value: "everyone", label: "Everyone", help: "Anyone in the call can draw" },
-  { value: "picked", label: "Ask first", help: "People ask, and you let them in" },
-  { value: "hosts", label: "Only hosts", help: "Others can only watch" },
-] satisfies readonly { value: DrawPolicy; label: string; help: string }[];
+  { value: "everyone", label: "Everyone" },
+  { value: "picked", label: "Ask first" },
+  { value: "hosts", label: "Only hosts" },
+] satisfies readonly { value: DrawPolicy; label: string }[];
 
 export const policyLabel = (policy: DrawPolicy): string => policies.find((entry) => entry.value === policy)?.label ?? "Everyone";
 
@@ -41,13 +41,13 @@ function useLiveRequests(client: ScreenAnnotationClient, state: ScreenAnnotation
   return requests;
 }
 
-/** The viewer's single entry to drawing: Draw, Ask to draw, or the pending ask. Nothing when hosts only. */
+/** The viewer's single entry to drawing, in the share header: Draw, Ask to draw, or the pending ask. Nothing when hosts only. */
 export function DrawEntry({ client, state, actorId, sharerName, onDraw, onRequest }: { readonly client: ScreenAnnotationClient; readonly state: ScreenAnnotationState; readonly actorId: string; readonly sharerName: string; readonly onDraw: () => void; readonly onRequest: () => void }) {
   const requests = useLiveRequests(client, state);
   const { access, paused } = state;
   if (canDraw(state, actorId)) {
     return (
-      <button type="button" className="chalk-ann-draw" onClick={onDraw}>
+      <button type="button" className="chalk-ann-draw" data-tone="solid" onClick={onDraw}>
         <StageIcon name="pen" size={18} />
         Draw
       </button>
@@ -64,14 +64,14 @@ export function DrawEntry({ client, state, actorId, sharerName, onDraw, onReques
   if (requests.some((request) => request.participant_id === actorId)) {
     return (
       <span role="status" className="chalk-ann-status chalk-ann-draw" data-quiet="">
-        <ChalkSpinner label="Waiting for an answer" className="size-4 border-[color-mix(in_srgb,var(--chalk-on-overlay)_30%,transparent)] border-t-[var(--chalk-on-overlay)]" />
-        Asked {firstName(sharerName)} to let you draw
+        <ChalkSpinner label="Waiting for an answer" className="size-4 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)]" />
+        Asked {firstName(sharerName)}
       </span>
     );
   }
   return (
     <button type="button" className="chalk-ann-draw" onClick={onRequest}>
-      <StageIcon name="pen" size={18} />
+      <StageIcon name="hand" size={18} />
       Ask to draw
     </button>
   );
@@ -86,18 +86,15 @@ export function WhoCanDrawMenu({ state, command }: { readonly state: ScreenAnnot
       trigger={
         <button type="button" className="chalk-ann-pill" aria-label={`Who can draw: ${policyLabel(policy)}`}>
           <HugeiconsIcon icon={UserGroupIcon} size={16} aria-hidden="true" />
-          <span className="chalk-ann-pill-text">Who can draw: {policyLabel(policy)}</span>
+          <span>Who can draw: {policyLabel(policy)}</span>
           <HugeiconsIcon icon={ArrowDown01Icon} size={14} aria-hidden="true" />
         </button>
       }
     >
-      <div className="chalk-menu-label">Who can draw on your screen</div>
-      {policies.map(({ value, label, help }) => (
-        <Menu.Item key={value} className="chalk-menu-item chalk-shell-source" role="menuitemradio" aria-checked={policy === value} onClick={() => policy !== value && command({ kind: "set_policy", policy: value })}>
-          <span className="chalk-shell-device-label">
-            <span>{label}</span>
-            <small>{help}</small>
-          </span>
+      <div className="chalk-menu-label">Who can draw</div>
+      {policies.map(({ value, label }) => (
+        <Menu.Item key={value} className="chalk-menu-item" role="menuitemradio" aria-checked={policy === value} onClick={() => policy !== value && command({ kind: "set_policy", policy: value })}>
+          <span>{label}</span>
           <span className="chalk-menu-check" aria-hidden="true">
             {policy === value ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -131,37 +128,35 @@ function drawerOf(state: ScreenAnnotationState, presence: readonly ScreenAnnotat
   return (live ?? visibleMarks(state, now).find((mark) => mark.author.participant_id !== actorId))?.author.display_name;
 }
 
-/** The sharer's second row: a pending request to allow, otherwise who is drawing. Renders nothing when neither applies. */
-export function SharerNotice({
+/** The sharer's header line beside the title: a request to allow, otherwise who is drawing and whether Chalk Helper shows the marks. Renders nothing when neither applies. */
+export function SharerTitle({
   client,
   state,
   presence,
   actorId,
   people,
-  helperOffered,
   helperShowing,
   command,
-  onShowMarks,
 }: {
   readonly client: ScreenAnnotationClient;
   readonly state: ScreenAnnotationState;
   readonly presence: readonly ScreenAnnotationPresence[];
   readonly actorId: string;
   readonly people: readonly AnnotationPerson[];
-  readonly helperOffered: boolean;
   readonly helperShowing: boolean;
   readonly command: (command: ScreenAnnotationCommand) => void;
-  readonly onShowMarks: () => void;
 }) {
   const requests = useLiveRequests(client, state);
   const request = state.access.draw_policy === "picked" ? requests.find((entry) => entry.participant_id !== actorId) : undefined;
   if (request) {
     const name = firstName(people.find((person) => person.id === request.participant_id)?.name ?? "Someone");
     return (
-      <div role="status" data-part="sharer-notice" className="chalk-ann-notice">
-        <span className="chalk-ann-notice-text">
-          <b>{name}</b> wants to draw on your screen
+      <div role="status" data-part="sharer-title" data-request="" className="chalk-ann-title">
+        <StageIcon name="hand" size={18} />
+        <span>
+          <b>{name}</b> wants to draw
         </span>
+        <span className="flex-1" />
         <button type="button" className="chalk-ann-pill" onClick={() => command({ kind: "decide_draw", request_id: request.request_id, allow: false })}>
           Not now
         </button>
@@ -172,15 +167,16 @@ export function SharerNotice({
     );
   }
   const drawer = drawerOf(state, presence, actorId, client.serverNowMs());
-  if (!drawer || helperShowing) return null;
+  if (!drawer && !helperShowing) return null;
   return (
-    <div role="status" data-part="sharer-notice" className="chalk-ann-notice">
-      <span className="chalk-ann-notice-text">{firstName(drawer)} is drawing. You see the marks here, not on your own screen.</span>
-      {helperOffered ? (
-        <button type="button" className="chalk-ann-pill" onClick={onShowMarks}>
-          Show marks on my screen
-        </button>
+    <div role="status" data-part="sharer-title" className="chalk-ann-title">
+      {helperShowing ? (
+        <span className="chalk-ann-live">
+          <i aria-hidden="true" />
+          Marks on your screen
+        </span>
       ) : null}
+      {drawer ? <span className="chalk-ann-muted">{firstName(drawer)} is drawing</span> : null}
     </div>
   );
 }
