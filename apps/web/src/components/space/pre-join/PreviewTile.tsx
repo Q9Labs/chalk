@@ -49,7 +49,6 @@ export function PreviewTile({
       element.srcObject = null;
     };
   }, [cameraTrack]);
-  const granted = devices.access === "granted";
   const name = displayName.trim() || "You";
   return (
     <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] lg:w-[600px]">
@@ -63,7 +62,6 @@ export function PreviewTile({
           {getParticipantInitials(name)}
         </span>
       )}
-      {granted ? <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-full bg-[var(--chalk-popover)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)]">Only you see this</span> : null}
       <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[var(--chalk-popover)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>

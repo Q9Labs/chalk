@@ -2,17 +2,11 @@ package episodes
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-)
-
-var (
-	ErrInvalidParticipantDescription = errors.New("invalid participant description")
-	ErrInvalidParticipantNotice      = errors.New("invalid participant notice")
 )
 
 func prepareAdmissionInput(input *AdmitParticipantInput) error {
@@ -72,9 +66,6 @@ func prepareAdmissionDetails(input *AdmitParticipantInput) error {
 	if input.Description != "" && (!utf8.ValidString(input.Description) || utf8.RuneCountInString(input.Description) > 80 || strings.TrimSpace(input.Description) != input.Description || strings.IndexFunc(input.Description, unicode.IsControl) >= 0) {
 		return ErrInvalidParticipantDescription
 	}
-	if input.Notice != "" && (!utf8.ValidString(input.Notice) || utf8.RuneCountInString(input.Notice) > 120 || strings.TrimSpace(input.Notice) != input.Notice || strings.IndexFunc(input.Notice, unicode.IsControl) >= 0) {
-		return ErrInvalidParticipantNotice
-	}
 	return nil
 }
 
@@ -114,7 +105,6 @@ func admissionFingerprint(input *AdmitParticipantInput, payload json.RawMessage)
 		IntentName         string          `json:"intent_name"`
 		Name               string          `json:"name"`
 		Description        string          `json:"description,omitempty"`
-		Notice             string          `json:"notice,omitempty"`
 		Metadata           json.RawMessage `json:"metadata"`
 		Role               string          `json:"role"`
 		IdentityID         string          `json:"identity_id"`
@@ -124,7 +114,7 @@ func admissionFingerprint(input *AdmitParticipantInput, payload json.RawMessage)
 	}{
 		Admission: fingerprintAdmission,
 		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
-		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name, Description: input.Description, Notice: input.Notice,
+		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name, Description: input.Description,
 		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), IdentityExternalID: input.IdentityExternalID, IdentityKind: fingerprintIdentityKind, Payload: payload,
 	})
 }

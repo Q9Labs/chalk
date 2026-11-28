@@ -2,6 +2,8 @@ export { createChalkPublicClient, createChalkPublicInviteClient } from "./client
 export { parseInviteCode } from "./code.js";
 export { arrivalErrorCode, arrivalRetryDelayMs, arriveRetryingEndingEpisode, entranceStep, isTerminalArrivalError } from "./entrance.js";
 export type { EntranceStep } from "./entrance.js";
+export { lobbyRoster } from "./lobby.js";
+export type { LobbyRoster } from "./lobby.js";
 export { createPublicSpaceSession, resumePublicSpaceSession } from "./session.js";
 export type { AdmittedArrival, PublicSpaceSession, PublicSpaceSessionOptions } from "./session.js";
 export { buildInviteCodeLink, buildSpaceInviteLink, canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, INVITE_HOSTS, parseChalkInviteLink, parseSpaceInviteLink, readSpaceInviteToken, verifiedSpaceInviteLink } from "./link.js";

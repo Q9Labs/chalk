@@ -8,7 +8,7 @@ import { ChalkButton } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { cn } from "../../utils/cn";
-import { LobbyNotice, type LobbyParticipant } from "../lobby/LobbyNotice";
+import { LobbyParticipants, type LobbyParticipant } from "../lobby/LobbyParticipants";
 
 export interface CallLimboProps {
   readonly spaceName?: string;
@@ -126,7 +126,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, seconda
             </span>
           </span>
         ) : null}
-        <LobbyNotice participants={participants} />
+        <LobbyParticipants participants={participants} />
         <RecordedNotice recorded={recorded} />
         {stacked === "waiting" ? (
           <span aria-hidden="true" className="mt-3 flex gap-1.5">

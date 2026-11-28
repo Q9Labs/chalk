@@ -66,24 +66,21 @@ func TestAdmissionIdentityKindIsStableForAnExternalIdentity(t *testing.T) {
 	}
 
 	service := episodes.NewService(NewEpisodeLifecycleRepository(pool))
-	admit := func(kind episodes.IdentityKind, details ...string) error {
+	admit := func(kind episodes.IdentityKind, descriptions ...string) error {
 		input := episodes.AdmitParticipantInput{
 			Admission: episodes.AdmissionDirect, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 			ParticipantID: accountTenantIntegrationID(t), Name: "Participant", Role: "collaborator",
 			IdentityExternalID: "stable-external", IdentityKind: kind,
 			Request: episodes.Request{Key: accountTenantIntegrationID(t).String()},
 		}
-		if len(details) > 0 {
-			input.Description = details[0]
-		}
-		if len(details) > 1 {
-			input.Notice = details[1]
+		if len(descriptions) > 0 {
+			input.Description = descriptions[0]
 		}
 		_, err := service.AdmitParticipant(ctx, input)
 		return err
 	}
 
-	if err := admit(episodes.IdentityKindAgent, "AI teammate", "An AI teammate is in this call."); err != nil {
+	if err := admit(episodes.IdentityKindAgent, "AI teammate"); err != nil {
 		t.Fatalf("admit agent: %v", err)
 	}
 	if err := admit(episodes.IdentityKindAgent); err != nil {
@@ -103,25 +100,17 @@ func TestAdmissionIdentityKindIsStableForAnExternalIdentity(t *testing.T) {
 		t.Fatalf("stored description = %q, err = %v, want AI teammate", description, err)
 	}
 
-	var notice string
-	if err := pool.QueryRow(ctx, `select coalesce(notice, '') from participants where tenant_id = $1 and episode_id = $2 order by created_at limit 1`, tenantID.Bytes(), episodeID.Bytes()).Scan(&notice); err != nil || notice != "An AI teammate is in this call." {
-		t.Fatalf("stored notice = %q, err = %v, want lobby notice", notice, err)
-	}
-
 	lobby, err := service.ListLobbyParticipants(ctx, tenantID, spaceID)
 	if err != nil {
 		t.Fatalf("list lobby participants: %v", err)
 	}
-	if len(lobby) == 0 {
-		t.Fatal("lobby roster is empty")
-	}
 	found := false
 	for _, participant := range lobby {
-		if participant.DisplayName == "Participant" && participant.IdentityKind == "agent" && participant.Notice == "An AI teammate is in this call." {
+		if participant.DisplayName == "Participant" && participant.IdentityKind == "agent" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("lobby rows = %#v, want participant name, agent kind and notice", lobby)
+		t.Fatalf("lobby rows = %#v, want participant name and agent kind", lobby)
 	}
 }

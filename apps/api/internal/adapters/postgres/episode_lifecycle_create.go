@@ -215,7 +215,7 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 
 		participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
-			ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Notice: pgtype.Text{String: input.Notice, Valid: input.Notice != ""}, Metadata: jsonBytes(input.Metadata),
+			ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Metadata: jsonBytes(input.Metadata),
 			Capabilities: append([]string(nil), roleCapabilities...), Role: input.Role,
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), IdentityID: uuid(input.IdentityID),
 		})
@@ -302,7 +302,7 @@ func createKnockAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx,
 		return fmt.Errorf("reserve knock admission capacity: %w", err)
 	}
 	participant, err := queries.CreateLifecycleParticipant(ctx, sqlc.CreateLifecycleParticipantParams{
-		ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Notice: pgtype.Text{String: input.Notice, Valid: input.Notice != ""}, Metadata: jsonBytes(input.Metadata), Capabilities: append([]string(nil), capabilities...), Role: input.Role,
+		ID: uuid(input.ParticipantID), Name: pgtype.Text{String: input.Name, Valid: true}, Description: pgtype.Text{String: input.Description, Valid: input.Description != ""}, Metadata: jsonBytes(input.Metadata), Capabilities: append([]string(nil), capabilities...), Role: input.Role,
 		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), IdentityID: uuid(input.IdentityID),
 	})
 	if err != nil {

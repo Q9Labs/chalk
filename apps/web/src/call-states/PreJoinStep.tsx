@@ -5,7 +5,7 @@ import { installPreJoinDevices, type FakeDeviceSetup } from "./pre-join-devices"
 
 const LOBBY_PARTICIPANTS = [
   { displayName: "Nora Patel", identityKind: "user" as const },
-  { displayName: "AI teammate", identityKind: "agent" as const, notice: "AI teammate, an AI participant, is in this call and takes notes." },
+  { displayName: "AI teammate", identityKind: "agent" as const },
 ];
 
 export function PreJoinStep({ theme, devices, joining }: { readonly theme: "light" | "dark"; readonly devices: FakeDeviceSetup; readonly joining: boolean }) {

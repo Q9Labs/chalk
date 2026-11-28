@@ -92,32 +92,6 @@ func TestPrepareAdmissionInputDescription(t *testing.T) {
 	}
 }
 
-func TestPrepareAdmissionInputNotice(t *testing.T) {
-	t.Run("accepts one hundred twenty Unicode characters", func(t *testing.T) {
-		input := admissionInputForTest(t)
-		input.Notice = strings.Repeat("å", 120)
-		if err := prepareAdmissionInput(&input); err != nil {
-			t.Fatalf("prepare notice: %v", err)
-		}
-	})
-
-	for name, notice := range map[string]string{
-		"one hundred twenty-one characters": strings.Repeat("a", 121),
-		"leading space":                     " AI teammate",
-		"trailing space":                    "AI teammate ",
-		"line break":                        "AI\nteammate",
-		"control character":                 "AI\tteammate",
-	} {
-		t.Run("rejects "+name, func(t *testing.T) {
-			input := admissionInputForTest(t)
-			input.Notice = notice
-			if err := prepareAdmissionInput(&input); !errors.Is(err, ErrInvalidParticipantNotice) {
-				t.Fatalf("prepare notice = %v, want invalid participant notice", err)
-			}
-		})
-	}
-}
-
 func TestAdmissionFingerprintIdentityKindCompatibility(t *testing.T) {
 	omitted := admissionInputForTest(t)
 	explicitUser := omitted
@@ -145,14 +119,5 @@ func TestAdmissionFingerprintIdentityKindCompatibility(t *testing.T) {
 	}
 	if described.Request.Fingerprint == omitted.Request.Fingerprint {
 		t.Fatal("description must change the idempotency fingerprint")
-	}
-
-	noticed := omitted
-	noticed.Notice = "An AI teammate is in this call."
-	if err := prepareAdmissionInput(&noticed); err != nil {
-		t.Fatalf("prepare noticed admission: %v", err)
-	}
-	if noticed.Request.Fingerprint == omitted.Request.Fingerprint {
-		t.Fatal("notice must change the idempotency fingerprint")
 	}
 }

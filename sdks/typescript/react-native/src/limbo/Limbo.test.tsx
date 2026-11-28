@@ -44,7 +44,7 @@ vi.mock("react-native-svg", () => {
 
 import { Limbo } from "./Limbo";
 
-it("renders the pre-join roster and AI disclosure in the knocking lobby", () => {
+it("renders the pre-join roster with an AI mark after each AI participant in the knocking lobby", () => {
   const markup = renderToStaticMarkup(
     <Limbo
       state={{ kind: "knocking", onCancel: () => undefined }}
@@ -52,12 +52,14 @@ it("renders the pre-join roster and AI disclosure in the knocking lobby", () => 
       recording={false}
       participants={[
         { displayName: "Ada", identityKind: "user" },
-        { displayName: "AI teammate", identityKind: "agent", notice: "A supplied notice is in this call." },
+        { displayName: "AI teammate", identityKind: "agent" },
         { displayName: "Sam", identityKind: "user" },
       ]}
     />,
   );
-  expect(markup).toContain("Ada, AI teammate (AI) and Sam are in this call");
-  expect(markup).toContain("A supplied notice is in this call.");
-  expect(markup).toContain("limbo.lobby.notice");
+  expect(markup).toContain("Ada");
+  expect(markup).toContain(" and Sam");
+  expect(markup).toContain(" are in this call");
+  expect(markup).toContain("limbo.lobby.ai.AI teammate");
+  expect(markup).not.toContain("limbo.lobby.notice");
 });

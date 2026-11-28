@@ -1713,7 +1713,6 @@ export interface components {
         | boolean
         | null;
       name: string;
-      notice?: string;
       participant_id?: components["schemas"]["ParticipantId"];
       role: string;
     };
@@ -2065,7 +2064,6 @@ export interface components {
       participants?: {
         display_name: string;
         identity_kind: string;
-        notice?: string | null;
       }[];
       prepared: boolean;
     };
@@ -2363,7 +2361,6 @@ export interface components {
         generation: number;
         id: components["schemas"]["ParticipantId"];
         identity_id?: components["schemas"]["UUID"] | null;
-        notice?: string | null;
         role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;
@@ -2375,7 +2372,6 @@ export interface components {
       participants: {
         display_name: string;
         identity_kind: string;
-        notice?: string | null;
       }[];
     };
     ParticipantRemoval: {
@@ -2396,7 +2392,6 @@ export interface components {
         generation: number;
         id: components["schemas"]["UUID"];
         identity_id?: components["schemas"]["UUID"] | null;
-        notice?: string | null;
         role: string;
         space_id: components["schemas"]["SpaceId"];
         status: string;

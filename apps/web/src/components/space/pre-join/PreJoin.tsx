@@ -1,4 +1,4 @@
-import { LobbyNotice, usePreJoinDevices, type LobbyParticipant, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { LobbyParticipants, usePreJoinDevices, type LobbyParticipant, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { ShellStyles } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
@@ -71,6 +71,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
 
   const title = <h1 className="text-(length:--type-headline) font-semibold leading-snug">{spaceName ?? "Join the call"}</h1>;
+  const lobby = <LobbyParticipants participants={participants} />;
   const preview = (
     <>
       <ShellStyles />
@@ -88,7 +89,6 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         if (ready) onJoin(devices.commit());
       }}
     >
-      <LobbyNotice participants={participants} />
       <label htmlFor="join-display-name" className="text-(length:--type-body-sm) font-semibold">
         Your name
       </label>
@@ -130,6 +130,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
       <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-[var(--chalk-app-canvas)] px-5 pt-6 text-[var(--chalk-app-text)]">
         <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col gap-3">
           {title}
+          {lobby}
           {preview}
           {rows}
           <div className="flex flex-1 flex-col justify-end">{form}</div>
@@ -146,6 +147,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         </div>
         <div className="flex h-[338px] flex-col justify-center gap-5">
           {title}
+          {lobby}
           {form}
         </div>
       </div>

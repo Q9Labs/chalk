@@ -30,7 +30,6 @@ export type ChalkPublicIdempotencyOptions = {
 export type LobbyParticipant = {
   readonly displayName: string;
   readonly identityKind: "user" | "agent" | "guest";
-  readonly notice?: string;
 };
 export type SpaceEntrancePreparation = {
   readonly prepared: boolean;

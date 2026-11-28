@@ -85,22 +85,14 @@ func prepareEntrance(ctx context.Context, preparer RecordingEntrancePreparer, te
 }
 
 type lobbyParticipantResponse struct {
-	DisplayName  string  `json:"display_name"`
-	IdentityKind string  `json:"identity_kind"`
-	Notice       *string `json:"notice,omitempty"`
+	DisplayName  string `json:"display_name"`
+	IdentityKind string `json:"identity_kind"`
 }
 
 func newPublicLobbyParticipantResponse(participants []publicinvites.LobbyParticipant) []lobbyParticipantResponse {
 	result := make([]lobbyParticipantResponse, 0, len(participants))
 	for _, participant := range participants {
-		result = append(result, lobbyParticipantResponse{DisplayName: participant.DisplayName, IdentityKind: participant.IdentityKind, Notice: agentNotice(participant.IdentityKind, participant.Notice)})
+		result = append(result, lobbyParticipantResponse{DisplayName: participant.DisplayName, IdentityKind: participant.IdentityKind})
 	}
 	return result
-}
-
-func agentNotice(kind, notice string) *string {
-	if kind != "agent" || notice == "" {
-		return nil
-	}
-	return &notice
 }

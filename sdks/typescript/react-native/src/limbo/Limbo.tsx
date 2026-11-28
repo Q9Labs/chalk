@@ -1,10 +1,11 @@
-import type { LobbyParticipant } from "@q9labsai/chalk-client";
+import { lobbyRoster, type LobbyParticipant } from "@q9labsai/chalk-client";
 import { useEffect, useRef } from "react";
 import { AccessibilityInfo, findNodeHandle, StyleSheet, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { FaceAvatar } from "../avatar/FaceAvatar";
+import { AIBadge } from "../primitives/AIBadge";
 import { ChalkText } from "../primitives/ChalkText";
 import { PillButton } from "../primitives/PillButton";
 import { useTheme } from "../theme/theme";
@@ -86,42 +87,31 @@ export function Limbo({ state, callName, recording, participants = [] }: LimboPr
 }
 
 function Lobby({ participants }: { readonly participants: readonly LobbyParticipant[] }): React.JSX.Element {
-  const notice = participants
-    .filter((participant) => participant.identityKind === "agent")
-    .map((participant) => participant.notice?.trim())
-    .filter(Boolean)
-    .join(" ");
+  const { shown, rest } = lobbyRoster(participants);
+  const parts = [...shown.map((participant) => ({ key: participant.displayName, text: participant.displayName, ai: participant.identityKind === "agent" })), ...(rest.length > 0 ? [{ key: "others", text: `${rest.length} others`, ai: false }] : [])];
   return (
     <View style={styles.lobby} testID="limbo.lobby">
-      <View style={styles.lobbySummary}>
-        <View style={styles.lobbyAvatars}>
-          {participants.slice(0, 3).map((participant, index) => (
-            <View key={`${participant.displayName}-${index}`} style={index === 0 ? undefined : styles.overlappedAvatar}>
-              <FaceAvatar name={participant.displayName} size={24} testID={`limbo.lobby.avatar.${index}`} />
-            </View>
-          ))}
-        </View>
-        <ChalkText tone="textSoft" variant="label" style={styles.center} testID="limbo.lobby.summary">
-          {lobbySummary(participants)}
-        </ChalkText>
+      <View style={styles.lobbyAvatars}>
+        {shown.slice(0, 3).map((participant, index) => (
+          <View key={`${participant.displayName}-${index}`} style={index === 0 ? undefined : styles.overlappedAvatar}>
+            <FaceAvatar name={participant.displayName} size={24} testID={`limbo.lobby.avatar.${index}`} />
+          </View>
+        ))}
       </View>
-      {notice ? (
-        <ChalkText tone="textMuted" variant="label" style={styles.agentNoticeText} testID="limbo.lobby.notice">
-          {notice}
-        </ChalkText>
-      ) : null}
+      <View style={styles.lobbyNames} testID="limbo.lobby.summary">
+        {parts.map((part, index) => (
+          <View key={part.key} style={styles.lobbyName}>
+            <ChalkText tone="textSoft" variant="label">
+              {index === 0 ? "" : index === parts.length - 1 ? " and " : ", "}
+              {part.text}
+            </ChalkText>
+            {part.ai ? <AIBadge testID={`limbo.lobby.ai.${part.key}`} /> : null}
+          </View>
+        ))}
+        <ChalkText tone="textSoft" variant="label">{` ${participants.length === 1 ? "is" : "are"} in this call`}</ChalkText>
+      </View>
     </View>
   );
-}
-
-function lobbySummary(participants: readonly LobbyParticipant[]): string {
-  const names = participants.map((participant) => (participant.identityKind === "agent" ? `${participant.displayName} (AI)` : participant.displayName));
-  if (names.length === 1) return `${names[0]} is in this call`;
-  if (names.length === 2) return `${names[0]} and ${names[1]} are in this call`;
-  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} are in this call`;
-  const rest = participants.slice(2);
-  const aiRest = rest.filter((participant) => participant.identityKind === "agent").length;
-  return `${names[0]}, ${names[1]} and ${rest.length} others${aiRest > 0 ? ` (${aiRest} AI)` : ""} are in this call`;
 }
 
 function Title({ children }: { readonly children: string }): React.JSX.Element {
@@ -206,9 +196,9 @@ const styles = StyleSheet.create({
   // `.consent` is 12 pt at the body weight.
   consentText: { fontFamily: fontFamilies[400], flexShrink: 1 },
   lobby: { alignItems: "center", gap: space[2], marginBottom: space[1] },
-  lobbySummary: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  lobbyNames: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
+  lobbyName: { flexDirection: "row", alignItems: "center", gap: space[1] },
   lobbyAvatars: { flexDirection: "row", alignItems: "center", paddingLeft: space["1-5"] },
   overlappedAvatar: { marginLeft: -space["1-5"] },
-  agentNoticeText: { maxWidth: 280, textAlign: "center" },
   spinner: { width: 18, height: 18, borderRadius: corners.pill, borderWidth: 2 },
 });

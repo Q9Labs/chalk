@@ -23,7 +23,6 @@ func (r PublicInviteRepository) ListLobbyParticipants(ctx context.Context, tenan
 			ParticipantID: utilities.IDFromBytes(row.ID.Bytes),
 			DisplayName:   row.DisplayName,
 			IdentityKind:  row.IdentityKind,
-			Notice:        row.Notice.String,
 		})
 	}
 	return result, nil

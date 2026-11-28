@@ -97,7 +97,6 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
           (participant): LobbyParticipant => ({
             displayName: participant.display_name,
             identityKind: participant.identity_kind as LobbyParticipant["identityKind"],
-            ...(participant.notice ? { notice: participant.notice } : {}),
           }),
         ),
       };

@@ -19,6 +19,7 @@ var (
 	ErrInvalidParticipantID               = errors.New("invalid episode participant id")
 	ErrInvalidParticipantGeneration       = errors.New("invalid episode participant generation")
 	ErrInvalidParticipantName             = errors.New("invalid episode participant name")
+	ErrInvalidParticipantDescription      = errors.New("invalid participant description")
 	ErrInvalidIdentityMode                = errors.New("invalid episode participant identity mode")
 	ErrInvalidAdmissionPolicy             = errors.New("invalid episode admission policy")
 	ErrInvalidRole                        = errors.New("invalid episode participant role")
@@ -95,9 +96,9 @@ var validCapabilities = func() map[string]struct{} {
 }()
 
 type Repository interface {
+	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]LobbyParticipant, error)
 	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]AttendanceParticipant, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]SpaceLiveEpisode, error)
-	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]LobbyParticipant, error)
 	ListSpaceActivity(context.Context, utilities.ID, []utilities.ID) ([]SpaceActivity, error)
 	CreateEpisode(context.Context, CreateEpisodeInput) (Episode, error)
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (Episode, error)
@@ -240,7 +241,6 @@ type AdmitParticipantInput struct {
 	ParticipantID      utilities.ID
 	Name               string
 	Description        string
-	Notice             string
 	Metadata           json.RawMessage
 	Role               string
 	IdentityID         utilities.ID
@@ -299,7 +299,6 @@ type Participant struct {
 	IdentityID   utilities.ID
 	Role         string
 	Description  string
-	Notice       string
 	Capabilities []string
 	Generation   int64
 	Status       string

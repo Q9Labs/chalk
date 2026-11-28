@@ -67,8 +67,7 @@ select participants.id,
          when identities.id is not null then identities.kind
          when participants.account_id is not null or participants.role = 'owner' then 'user'
          else 'guest'
-       end)::text as identity_kind,
-       participants.notice
+       end)::text as identity_kind
 from episodes
 join participants
   on participants.tenant_id = episodes.tenant_id

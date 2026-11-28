@@ -24,7 +24,7 @@ insert into participants (
        and episode_id = $8
        and account_id = $9), 'joining'
 )
-returning id, name, description, notice, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+returning id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type CreateDashboardLifecycleParticipantParams struct {
@@ -56,7 +56,6 @@ func (q *Queries) CreateDashboardLifecycleParticipant(ctx context.Context, arg C
 		&i.ID,
 		&i.Name,
 		&i.Description,
-		&i.Notice,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,
@@ -120,8 +119,7 @@ select participants.id,
          when identities.id is not null then identities.kind
          when participants.account_id is not null or participants.role = 'owner' then 'user'
          else 'guest'
-       end)::text as identity_kind,
-       participants.notice
+       end)::text as identity_kind
 from episodes
 join participants
   on participants.tenant_id = episodes.tenant_id
@@ -146,7 +144,6 @@ type ListSpaceLobbyParticipantsRow struct {
 	ID           pgtype.UUID `json:"id"`
 	DisplayName  string      `json:"display_name"`
 	IdentityKind string      `json:"identity_kind"`
-	Notice       pgtype.Text `json:"notice"`
 }
 
 func (q *Queries) ListSpaceLobbyParticipants(ctx context.Context, arg ListSpaceLobbyParticipantsParams) ([]ListSpaceLobbyParticipantsRow, error) {
@@ -158,12 +155,7 @@ func (q *Queries) ListSpaceLobbyParticipants(ctx context.Context, arg ListSpaceL
 	var items []ListSpaceLobbyParticipantsRow
 	for rows.Next() {
 		var i ListSpaceLobbyParticipantsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DisplayName,
-			&i.IdentityKind,
-			&i.Notice,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.IdentityKind); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -231,7 +223,7 @@ func (q *Queries) LockDashboardJoinIntentForUpdate(ctx context.Context, arg Lock
 }
 
 const lockDashboardParticipantForUpdate = `-- name: LockDashboardParticipantForUpdate :one
-select id, name, description, notice, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
+select id, name, description, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 from participants
 where tenant_id = $1
   and space_id = $2
@@ -260,7 +252,6 @@ func (q *Queries) LockDashboardParticipantForUpdate(ctx context.Context, arg Loc
 		&i.ID,
 		&i.Name,
 		&i.Description,
-		&i.Notice,
 		&i.Metadata,
 		&i.Capabilities,
 		&i.TenantID,

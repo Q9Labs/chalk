@@ -26,7 +26,6 @@ func (r EpisodeLifecycleRepository) ListLobbyParticipants(ctx context.Context, t
 			ParticipantID: utilities.IDFromBytes(row.ID.Bytes),
 			DisplayName:   row.DisplayName,
 			IdentityKind:  row.IdentityKind,
-			Notice:        row.Notice.String,
 		})
 	}
 	if err := tx.Commit(ctx); err != nil {

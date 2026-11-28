@@ -24,6 +24,10 @@ type admissionLifecycleProbe struct {
 	calls     int
 }
 
+func (p *admissionLifecycleProbe) ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error) {
+	return nil, nil
+}
+
 func (p *admissionLifecycleProbe) GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]episodes.AttendanceParticipant, error) {
 	return nil, nil
 }
@@ -38,9 +42,6 @@ func (p *admissionLifecycleProbe) CreateEpisode(context.Context, episodes.Create
 }
 func (p *admissionLifecycleProbe) GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error) {
 	return episodes.Episode{}, nil
-}
-func (p *admissionLifecycleProbe) ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error) {
-	return nil, nil
 }
 func (p *admissionLifecycleProbe) ListEpisodes(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (episodes.EpisodeList, error) {
 	return episodes.EpisodeList{}, nil
@@ -132,21 +133,6 @@ func TestAdmitParticipantAgentKindRequiresBackendCredential(t *testing.T) {
 		}
 	})
 
-	t.Run("session collaborator cannot set a lobby notice", func(t *testing.T) {
-		probe := newProbe()
-		principal := authentication.Principal{Kind: authentication.PrincipalUser, UserID: mustID(t, "77777777-7777-4777-8777-777777777777")}
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"name":"Akash Rao","role":"collaborator","notice":"An AI teammate is in this call."}`))
-		request.Header.Set(idempotencyKeyHeader, "admission-request-1")
-		response := httptest.NewRecorder()
-		admissionRouter(probe, principal).ServeHTTP(response, request)
-		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"participant.notice_forbidden"`) {
-			t.Fatalf("status/body = %d %s, want participant.notice_forbidden 403", response.Code, response.Body.String())
-		}
-		if probe.calls != 0 {
-			t.Fatal("forbidden session lobby notice reached the service")
-		}
-	})
-
 	for _, tc := range []struct {
 		name      string
 		principal authentication.Principal
@@ -167,28 +153,5 @@ func TestAdmitParticipantAgentKindRequiresBackendCredential(t *testing.T) {
 				t.Fatalf("service calls/kind = %d %q", probe.calls, probe.input.IdentityKind)
 			}
 		})
-	}
-}
-
-func TestAdmitParticipantBackendCanSetLobbyNotice(t *testing.T) {
-	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
-	spaceID := mustID(t, "22222222-2222-4222-8222-222222222222")
-	episodeID := mustID(t, "33333333-3333-4333-8333-333333333333")
-	participantID := mustID(t, "44444444-4444-4444-8444-444444444444")
-	intentID := mustID(t, "55555555-5555-4555-8555-555555555555")
-	probe := &admissionLifecycleProbe{admission: episodes.Admission{
-		Participant: episodes.Participant{ID: participantID, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Role: "collaborator", Generation: 1, Status: episodes.ParticipantStatusJoining},
-		Intent:      episodes.Intent{ID: intentID, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RequestKey: "admission-request-1", IntentName: episodes.IntentAdmissionRequested, ParticipantID: participantID, ParticipantGeneration: 1, Status: episodes.IntentStatusPending, CreatedAt: time.Unix(1, 0).UTC()},
-	}}
-	principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: "backend", Scopes: []authentication.Scope{authentication.ScopeEpisodesWrite}}
-	request := httptest.NewRequest(http.MethodPost, "/tenants/"+tenantID.String()+"/spaces/"+spaceID.String()+"/episodes/"+episodeID.String()+"/participants", strings.NewReader(`{"name":"AI teammate","role":"collaborator","notice":"An AI teammate is in this call."}`))
-	request.Header.Set(idempotencyKeyHeader, "admission-request-1")
-	response := httptest.NewRecorder()
-	admissionRouter(probe, principal).ServeHTTP(response, request)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201: %s", response.Code, response.Body.String())
-	}
-	if probe.calls != 1 || probe.input.Notice != "An AI teammate is in this call." {
-		t.Fatalf("notice input = %d %q", probe.calls, probe.input.Notice)
 	}
 }

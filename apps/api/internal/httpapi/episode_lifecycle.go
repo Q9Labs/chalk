@@ -31,7 +31,6 @@ var (
 type EpisodeLifecycleService interface {
 	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]episodes.AttendanceParticipant, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]episodes.SpaceLiveEpisode, error)
-	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error)
 	ListSpaceActivity(context.Context, utilities.ID, []utilities.ID) ([]episodes.SpaceActivity, error)
 	CreateEpisode(context.Context, episodes.CreateEpisodeInput) (episodes.Episode, error)
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
@@ -40,6 +39,7 @@ type EpisodeLifecycleService interface {
 	RequestParticipantRemoval(context.Context, episodes.RequestParticipantRemovalInput) (episodes.Removal, error)
 	RequestEpisodeEnd(context.Context, episodes.RequestEpisodeEndInput) (episodes.EndRequest, error)
 	SetDeadline(context.Context, episodes.SetDeadlineInput) (episodes.ControlRequest, error)
+	ListLobbyParticipants(context.Context, utilities.ID, utilities.ID) ([]episodes.LobbyParticipant, error)
 }
 
 type SyncTokenIssuer interface {
@@ -153,7 +153,6 @@ type participantResponse struct {
 	IdentityID   *string  `json:"identity_id,omitempty"`
 	Role         string   `json:"role"`
 	Description  *string  `json:"description,omitempty"`
-	Notice       *string  `json:"notice,omitempty"`
 	Capabilities []string `json:"capabilities"`
 	Generation   int64    `json:"generation"`
 	Status       string   `json:"status"`
@@ -289,7 +288,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		if err := checkAdmissionPreconditions(ctx, request, media, spacesService, tenantsService); err != nil {
 			return participantLifecycleResponse{}, err
 		}
-		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Description: request.Body.Description, Notice: request.Body.Notice, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, IdentityExternalID: request.Body.IdentityExternalID, IdentityKind: request.Body.IdentityKind, Request: episodes.Request{Key: request.RequestKey}})
+		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Description: request.Body.Description, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, IdentityExternalID: request.Body.IdentityExternalID, IdentityKind: request.Body.IdentityKind, Request: episodes.Request{Key: request.RequestKey}})
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
@@ -349,7 +348,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 	}).Permission(authorizer, writeEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorIdentityKindConflict, apiErrorIdentityKindForbidden, apiErrorParticipantDescriptionForbidden, apiErrorParticipantNoticeForbidden, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorIdentityKindConflict, apiErrorIdentityKindForbidden, apiErrorParticipantDescriptionForbidden, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
 }
 
 func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant, clients mediaplane.ClientProviders) (mediaplane.Join, error) {
@@ -462,7 +461,7 @@ func newEpisodeResponse(episode episodes.Episode) episodeResponse {
 }
 
 func newParticipantResponse(participant episodes.Participant) participantResponse {
-	return participantResponse{ID: participant.ID.String(), TenantID: participant.TenantID.String(), SpaceID: participant.SpaceID.String(), EpisodeID: participant.EpisodeID.String(), IdentityID: optionalIDString(participant.IdentityID), Role: participant.Role, Description: optionalString(participant.Description), Notice: optionalString(participant.Notice), Capabilities: append([]string{}, participant.Capabilities...), Generation: participant.Generation, Status: participant.Status}
+	return participantResponse{ID: participant.ID.String(), TenantID: participant.TenantID.String(), SpaceID: participant.SpaceID.String(), EpisodeID: participant.EpisodeID.String(), IdentityID: optionalIDString(participant.IdentityID), Role: participant.Role, Description: optionalString(participant.Description), Capabilities: append([]string{}, participant.Capabilities...), Generation: participant.Generation, Status: participant.Status}
 }
 
 func newParticipantLifecycleResponse(participant episodes.Participant, intent episodes.Intent) participantLifecycleResponse {
@@ -529,7 +528,7 @@ var episodeLifecycleRules = errorRules{
 	ruleFor(apiErrorIdentityKindConflict, episodes.ErrIdentityKindConflict),
 	ruleFor(apiErrorEpisodeCapacityExceeded, episodes.ErrEpisodeAlreadyExists),
 	ruleFor(apiErrorEpisodeCapacityExceeded, episodes.ErrCapacityExceeded),
-	ruleFor(apiErrorInvalidRequest, episodes.ErrInvalidIdentityMode, episodes.ErrAdmissionClosed, episodes.ErrInvalidAdmissionPolicy, episodes.ErrInvalidRole, episodes.ErrInvalidRoleCapabilities, episodes.ErrInvalidConfigSnapshot, episodes.ErrInvalidParticipantName, episodes.ErrInvalidParticipantDescription, episodes.ErrInvalidParticipantNotice, episodes.ErrInvalidParticipantGeneration, episodes.ErrInvalidIntentPayload, episodes.ErrInvalidInitialControlState, episodes.ErrInvalidMaximumDuration, episodes.ErrInvalidMaximumDurationCeiling, episodes.ErrInvalidDeadline, episodes.ErrDeadlineExceedsCeiling, episodes.ErrDeadlineChangePending),
+	ruleFor(apiErrorInvalidRequest, episodes.ErrInvalidIdentityMode, episodes.ErrAdmissionClosed, episodes.ErrInvalidAdmissionPolicy, episodes.ErrInvalidRole, episodes.ErrInvalidRoleCapabilities, episodes.ErrInvalidConfigSnapshot, episodes.ErrInvalidParticipantName, episodes.ErrInvalidParticipantDescription, episodes.ErrInvalidParticipantGeneration, episodes.ErrInvalidIntentPayload, episodes.ErrInvalidInitialControlState, episodes.ErrInvalidMaximumDuration, episodes.ErrInvalidMaximumDurationCeiling, episodes.ErrInvalidDeadline, episodes.ErrDeadlineExceedsCeiling, episodes.ErrDeadlineChangePending),
 }
 
 func episodeTimestampString(value time.Time) string {

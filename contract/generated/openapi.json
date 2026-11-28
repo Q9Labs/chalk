@@ -9484,7 +9484,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden", "participant.description_forbidden", "participant.notice_forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "identity.kind_forbidden", "participant.description_forbidden"]
           },
           "404": {
             "content": {
@@ -16724,12 +16724,6 @@
             "minLength": 1,
             "type": "string"
           },
-          "notice": {
-            "maxLength": 120,
-            "minLength": 1,
-            "type": "string",
-            "x-chalk-length-unit": "code-points"
-          },
           "participant_id": {
             "$ref": "#/components/schemas/ParticipantId"
           },
@@ -17510,9 +17504,6 @@
                 },
                 "identity_kind": {
                   "type": "string"
-                },
-                "notice": {
-                  "type": ["string", "null"]
                 }
               },
               "required": ["display_name", "identity_kind"],
@@ -18488,9 +18479,6 @@
                   }
                 ]
               },
-              "notice": {
-                "type": ["string", "null"]
-              },
               "role": {
                 "type": "string"
               },
@@ -18526,9 +18514,6 @@
                 },
                 "identity_kind": {
                   "type": "string"
-                },
-                "notice": {
-                  "type": ["string", "null"]
                 }
               },
               "required": ["display_name", "identity_kind"],
@@ -18611,9 +18596,6 @@
                     "type": "null"
                   }
                 ]
-              },
-              "notice": {
-                "type": ["string", "null"]
               },
               "role": {
                 "type": "string"

@@ -49,7 +49,7 @@ func TestParticipantLobbyRequiresTheExactAccessGrant(t *testing.T) {
 		episode: episodes.Episode{ID: episodeID, TenantID: tenantID, SpaceID: spaceID, Status: episodes.EpisodeStatusActive, StartedAt: time.Unix(1, 0).UTC()},
 		participants: []episodes.LobbyParticipant{
 			{ParticipantID: participantID, DisplayName: "Self", IdentityKind: "user"},
-			{ParticipantID: otherID, DisplayName: "AI teammate", IdentityKind: "agent", Notice: "An AI teammate is in this call."},
+			{ParticipantID: otherID, DisplayName: "AI teammate", IdentityKind: "agent"},
 		},
 	}
 	serve := func(header string, verifier participantLobbyVerifier) *httptest.ResponseRecorder {
@@ -96,7 +96,7 @@ func TestParticipantLobbyRequiresTheExactAccessGrant(t *testing.T) {
 		if strings.Contains(body, "Self") || strings.Contains(body, "participant_id") {
 			t.Fatalf("body includes caller or identifiers: %s", body)
 		}
-		if !strings.Contains(body, `"display_name":"AI teammate"`) || !strings.Contains(body, `"notice":"An AI teammate is in this call."`) {
+		if !strings.Contains(body, `"display_name":"AI teammate"`) {
 			t.Fatalf("body missing limited agent row: %s", body)
 		}
 	})

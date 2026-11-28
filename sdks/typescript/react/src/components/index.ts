@@ -40,8 +40,8 @@ export { Logo } from "./logo/Logo";
 export type { LogoProps, LogoVariant } from "./logo/Logo";
 
 export { CallLimbo } from "./call-limbo/CallLimbo";
-export { LobbyNotice } from "./lobby/LobbyNotice";
-export type { LobbyNoticeProps, LobbyParticipant } from "./lobby/LobbyNotice";
+export { LobbyParticipants } from "./lobby/LobbyParticipants";
+export type { LobbyParticipantsProps, LobbyParticipant } from "./lobby/LobbyParticipants";
 export type { CallLimboProps } from "./call-limbo/CallLimbo";
 
 export { ScreenAnnotationLayer } from "./screen-annotation/ScreenAnnotationLayer";

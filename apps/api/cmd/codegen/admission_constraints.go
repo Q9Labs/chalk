@@ -10,8 +10,4 @@ func applyAdmissionFieldConstraints(schema map[string]any, request bool, schemaN
 		schema["maxLength"] = 80
 		schema[lengthUnitExtension] = codePointLengthUnit
 	}
-	if request && schemaName == "AdmitEpisodeParticipantRequest" && fieldName == "notice" {
-		schema["maxLength"] = 120
-		schema[lengthUnitExtension] = codePointLengthUnit
-	}
 }

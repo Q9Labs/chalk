@@ -58,7 +58,7 @@ func participantLobbyEndpoint(service ParticipantLobbyService, verifier Particip
 func newEpisodeLobbyParticipantResponse(participants []episodes.LobbyParticipant) []lobbyParticipantResponse {
 	result := make([]lobbyParticipantResponse, 0, len(participants))
 	for _, participant := range participants {
-		result = append(result, lobbyParticipantResponse{DisplayName: participant.DisplayName, IdentityKind: participant.IdentityKind, Notice: agentNotice(participant.IdentityKind, participant.Notice)})
+		result = append(result, lobbyParticipantResponse{DisplayName: participant.DisplayName, IdentityKind: participant.IdentityKind})
 	}
 	return result
 }

@@ -30,7 +30,6 @@ func (r *entranceLobbyResolver) ListLobbyParticipants(context.Context, utilities
 func TestPublicSpaceEntranceRosterAuthorization(t *testing.T) {
 	tenantID := mustID(t, "11111111-1111-4111-8111-111111111111")
 	spaceID := mustID(t, "22222222-2222-4222-8222-222222222222")
-	notice := "An AI teammate is in this call and takes notes."
 	serve := func(resolver *entranceLobbyResolver) *httptest.ResponseRecorder {
 		router := chi.NewRouter()
 		publicRecordingEntranceEndpoint(nil, resolver, nil).Mount(router, RateLimitOptions{})
@@ -45,7 +44,7 @@ func TestPublicSpaceEntranceRosterAuthorization(t *testing.T) {
 			invite: publicinvites.Invite{TenantID: tenantID, SpaceID: spaceID, Enabled: true},
 			participants: []publicinvites.LobbyParticipant{
 				{ParticipantID: mustID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), DisplayName: "Ada", IdentityKind: "user"},
-				{ParticipantID: mustID(t, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), DisplayName: "AI teammate", IdentityKind: "agent", Notice: notice},
+				{ParticipantID: mustID(t, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), DisplayName: "AI teammate", IdentityKind: "agent"},
 			},
 		}
 		response := serve(resolver)
@@ -53,7 +52,7 @@ func TestPublicSpaceEntranceRosterAuthorization(t *testing.T) {
 			t.Fatalf("status = %d, want 200: %s", response.Code, response.Body.String())
 		}
 		body := response.Body.String()
-		for _, field := range []string{`"display_name":"Ada"`, `"identity_kind":"agent"`, `"notice":"` + notice + `"`} {
+		for _, field := range []string{`"display_name":"Ada"`, `"identity_kind":"agent"`} {
 			if !strings.Contains(body, field) {
 				t.Fatalf("body %s does not include %s", body, field)
 			}

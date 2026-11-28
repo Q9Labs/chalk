@@ -4,7 +4,6 @@ import { Schema, SchemaGetter } from "effect";
 
 export const ChalkCodePointLimits = {
   "AdmitEpisodeParticipantRequest.description": 80,
-  "AdmitEpisodeParticipantRequest.notice": 120,
   "CreateSpaceRequest.name": 120,
   "CreateTenantRequest.external_id": 512,
   "ProblemReportRequest.description": 1000,
@@ -139,7 +138,6 @@ export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
     identity_kind: Schema.optional(Schema.Literals(["user", "agent"])),
     metadata: Schema.optional(Schema.Unknown),
     name: Schema.String.check(Schema.isMinLength(1)),
-    notice: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
     participant_id: Schema.optional(ParticipantIdSchema),
     role: Schema.String.check(Schema.isMinLength(1)),
   }))();
@@ -580,7 +578,6 @@ export const EntrancePreparationSchema = /* @__PURE__ */ (() =>
         Schema.Struct({
           display_name: Schema.String,
           identity_kind: Schema.String,
-          notice: Schema.optional(Schema.NullOr(Schema.String)),
         }),
       ),
     ),
@@ -961,7 +958,6 @@ export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
       generation: Schema.Number,
       id: ParticipantIdSchema,
       identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-      notice: Schema.optional(Schema.NullOr(Schema.String)),
       role: Schema.String,
       space_id: SpaceIdSchema,
       status: Schema.String,
@@ -977,7 +973,6 @@ export const ParticipantLobbySchema = /* @__PURE__ */ (() =>
       Schema.Struct({
         display_name: Schema.String,
         identity_kind: Schema.String,
-        notice: Schema.optional(Schema.NullOr(Schema.String)),
       }),
     ),
   }))();
@@ -1002,7 +997,6 @@ export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
       generation: Schema.Number,
       id: UUIDSchema,
       identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-      notice: Schema.optional(Schema.NullOr(Schema.String)),
       role: Schema.String,
       space_id: SpaceIdSchema,
       status: Schema.String,
@@ -5822,25 +5816,6 @@ export const ParticipantNotFoundErrorSchema = ParticipantNotFoundErrorWireSchema
   }),
 );
 
-export class ParticipantNoticeForbiddenError extends Schema.TaggedErrorClass<ParticipantNoticeForbiddenError>()("ParticipantNoticeForbiddenError", {
-  error: Schema.Struct({
-    code: Schema.Literal("participant.notice_forbidden"),
-    message: Schema.String,
-  }),
-}) {}
-export const ParticipantNoticeForbiddenErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("participant.notice_forbidden"),
-    message: Schema.String,
-  }),
-});
-export const ParticipantNoticeForbiddenErrorSchema = ParticipantNoticeForbiddenErrorWireSchema.pipe(
-  Schema.decodeTo(ParticipantNoticeForbiddenError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantNoticeForbiddenError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class PresentingDocumentNotFoundError extends Schema.TaggedErrorClass<PresentingDocumentNotFoundError>()("PresentingDocumentNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("presenting.document_not_found"),
@@ -7602,7 +7577,6 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   MediaUnavailableErrorSchema,
   ParticipantDescriptionForbiddenErrorSchema,
   ParticipantInvalidIdErrorSchema,
-  ParticipantNoticeForbiddenErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,

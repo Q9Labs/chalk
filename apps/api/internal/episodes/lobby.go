@@ -11,7 +11,6 @@ type LobbyParticipant struct {
 	ParticipantID utilities.ID
 	DisplayName   string
 	IdentityKind  string
-	Notice        string
 }
 
 func (s Service) ListLobbyParticipants(ctx context.Context, tenantID, spaceID utilities.ID) ([]LobbyParticipant, error) {
