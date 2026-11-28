@@ -337,7 +337,7 @@ returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, m
                 'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
                 'requestMediaOthers', 'removeParticipant', 'manageRecording',
                 'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-                'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
+                'clearSpaceContent'
             ]::text[]
         ),
         (
@@ -1153,7 +1153,7 @@ values
         'assignRoles', 'muteOthers', 'stopVideoOthers', 'stopScreenOthers',
         'requestMediaOthers', 'removeParticipant', 'manageRecording',
         'startEpisode', 'extendEpisode', 'endEpisode', 'manageMembers',
-        'clearSpaceContent', 'focus.view', 'focus.manage', 'focus.exempt'
+        'clearSpaceContent'
     ]::text[]
 ),
 (

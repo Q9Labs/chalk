@@ -8,9 +8,9 @@ alter table spaces add constraint spaces_focus_check check (
     and jsonb_typeof(focus -> 'enabled') = 'boolean'
 );
 
--- The three capabilities are part of the closed capability namespace. Owner is
--- the only default bundle that receives them; existing owner rows get the new
--- additive namespace so older Spaces can turn the setting on without manual repair.
+-- The three capabilities join the closed capability namespace. No role is granted
+-- them here: the release before Focus rejects a token that carries an unknown
+-- capability, so the owner grant ships in a later release.
 create or replace function valid_capabilities(value text[])
 returns boolean
 language sql
@@ -29,12 +29,6 @@ as $$
         and cardinality(value) <= 26
         and cardinality(value) = (select count(distinct capability) from unnest(value) as capability)
 $$;
-
-update space_roles
-set capabilities = capabilities || array['focus.view', 'focus.manage', 'focus.exempt']::text[],
-    updated_at = now()
-where name = 'owner'
-  and not (capabilities @> array['focus.view', 'focus.manage', 'focus.exempt']::text[]);
 
 -- Reported app states are durable only once they close. A missing or unclosed
 -- interval means "not reporting"; it never counts as away time.
