@@ -226,16 +226,14 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await mobile.getByRole("button", { name: "Draw", exact: true }).waitFor();
     expect(await helperCard(mobile).count()).toBe(0);
     await drawLiveMark(guest);
-    await helperCard(host)
-      .getByText(/Desktop Guest is drawing on your share/)
-      .waitFor();
+    await host.locator('[data-part="sharer-title"]').getByText("Desktop is drawing", { exact: true }).waitFor();
     if (evidence) await host.screenshot({ path: join(evidence, "host-window-drawing.png") });
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
 
     await host.evaluate(() => localStorage.setItem("fixture-opaque-window", "1"));
     await chooseShare(host, "Window", installer);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).click();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).click();
     await helperCard(host)
       .getByText(/Share your entire screen to use it/)
       .waitFor();
@@ -263,9 +261,9 @@ test("live annotation: a dashboard host and a guest each get Helper before and a
     await helperCard(guest).waitFor({ state: "detached" });
 
     await chooseShare(host, "Entire screen", installer);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).waitFor();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).waitFor();
     expect(await helperCard(host).count()).toBe(0);
-    await host.getByRole("button", { name: "Chalk Helper", exact: true }).click();
+    await host.getByRole("button", { name: "Show on my screen", exact: true }).click();
     await helperCard(host).getByText(intro, { exact: true }).waitFor();
     await stopShare(host);
     await helperCard(host).waitFor({ state: "detached" });
