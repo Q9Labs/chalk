@@ -72,6 +72,12 @@ await runJourney("focus-attention", async ({ step, person, seed, web, joinByLink
     await viewer.page.getByRole("button", { name: /^Allow other tabs/ }).click();
     await viewer.page.getByRole("button", { name: "5 min", exact: true }).click();
     await viewer.page.getByText("Other tabs are allowed", { exact: true }).waitFor({ timeout: wait });
+    await viewer.page.getByText(/^[0-5]:\d\d left$/).waitFor({ timeout: wait });
+    const font = await viewer.page.evaluate(() => ({
+      computed: getComputedStyle(document.querySelector(".chalk-shell-detail-label") ?? document.body).fontFamily,
+      loaded: [...document.fonts].filter((face) => face.status === "loaded" && /figtree/i.test(face.family)).length,
+    }));
+    if (!/figtree/i.test(font.computed) || font.loaded === 0) throw new Error(`the call menu is not rendering in Chalk's font: ${JSON.stringify(font)}`);
     await shot(viewer, "allowance");
     await viewer.page.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
     await setWindow(guest, true);
