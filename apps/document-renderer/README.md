@@ -31,7 +31,6 @@ LibreOffice is a large, untrusted-input parser written in C++, with the Java int
 - The parent holds no ambient authority: object access is through pre-signed URLs and the control capability, and any failure exits the parent so Lambda recycles the execution environment.
 
 What is not isolated on Lambda: user namespaces are unavailable, so the converter does not get its own network namespace or a private filesystem view. A compromised soffice can read the image filesystem, reach the network that the function has, and read or write `/tmp` for the duration of the job, including the other jobs' scratch in the same environment if invocations overlap. It runs as the same uid as the parent, so non-dumpable protection of the parent is the only barrier to its memory. Outside Lambda, the child is placed in new user and network namespaces when the host allows it. Recycling the execution environment after each job bounds the time an attacker keeps any foothold.
-||||||| 82a906dfb
 
 ## Packaging
 
